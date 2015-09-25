@@ -1,4 +1,3 @@
-/* $Id: apache20.h 125 2004-04-29 18:05:25Z urkle@drip.ws $ */
 #ifndef APACHE20_H
 #define APACHE20_H
 

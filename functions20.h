@@ -1,5 +1,3 @@
-/* $Id: functions20.h 171 2006-11-07 02:44:33Z urkle@drip.ws $ */
-
 static const char *extract_bytes_sent(request_rec *r, char *a)
 {
 	if (!r->sent_bodyct || !r->bytes_sent) {

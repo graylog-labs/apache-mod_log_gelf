@@ -1,5 +1,3 @@
-/* $Id: functions.h 151 2004-09-20 02:51:50Z urkle@drip.ws $ */
-
 /* Begin the individual functions that, given a request r,
  * extract the needed information from it and return the
  * value to the calling entity.
@@ -238,14 +236,6 @@ static const char *extract_specific_cookie(request_rec *r, char *a)
 	return "-";
 }
 
-//static const char *extract_cookie(request_rec *r, char *a)
-//{
-//	logsql_state *cls = ap_get_module_config(r->server->module_config,
-//											&log_sql_module);
-//
-//	return extract_specific_cookie(r, (char *)cls->cookie_name);
-//}
-
 static const char *extract_unique_id(request_rec *r, char *a)
 {
     const char *tempid;
@@ -256,5 +246,3 @@ static const char *extract_unique_id(request_rec *r, char *a)
 	else
 	  return tempid;
 }
-
-/* End declarations of various extract_ functions */

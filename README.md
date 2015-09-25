@@ -3,7 +3,7 @@ Apache2 module for writing access logs to Graylog
 
 # Build
 
-Install dependenrtd c libraries:
+Install dependent c libraries:
 
 ```
   $ sudo apt-get install apache2-dev
@@ -38,41 +38,42 @@ Configure the module `/etc/apache2/mods-enabled/log_gelf.conf`:
   GelfFields "ABDhmsvRti"
 ```
 
-| Parameter | Argument | Description |
-|-----------|----------|-------------|
-| GelfEnabled | On/Off | Load GELF logging module |
-| GelfUrl | Graylog server URL | Set IP and port of a UDP GELF input |
-| GelfSource | (Optional) | Overwrite source field |
-| GelfFacility | (Optional) | Overwrite logging facility |
-| GelfTag | (Optional) | Add a `tag` field to every log message |
-| GelfCookie | (Optional) cookie name | Extract cookie from web request |
-| GelfFields | (Optional) | Configures which information should be logged |
+| Parameter    | Argument               | Description                                   |
+|--------------|------------------------|-----------------------------------------------|
+| GelfEnabled  | On/Off                 | Load GELF logging module                      |
+| GelfUrl      | Graylog server URL     | Set IP and port of a UDP GELF input           |
+| GelfSource   | (Optional)             | Overwrite source field                        |
+| GelfFacility | (Optional)             | Overwrite logging facility                    |
+| GelfTag      | (Optional)             | Add a `tag` field to every log message        |
+| GelfCookie   | (Optional) cookie name | Extract cookie from web request               |
+| GelfFields   | (Optional)             | Configures which information should be logged |
 
 What does the `GelfFields` string mean:
 
 | Character | Logging information |
-| A | Agent string |
-| a | Request arguments |
-| B | Bytes send |
-| C | Conection Status |
-| c | Extract Cookie |
-| D | Request duration |
-| f | Requested file |
-| H | Protocol |
-| h | Remote host |
-| i | Remote address |
-| L | Local address |
-| l | Auth login name |
-| m | Request methode |
-| p | Server posrt |
-| R | Referer |
-| r | Request string |
-| s | Return status |
-| t | Request timestamp |
-| U | Request URI |
-| u | Username |
-| V | Server name |
-| v | VirtualHost name |
+|-----------|---------------------|
+| A         | Agent string        |
+| a         | Request arguments   |
+| B         | Bytes send          |
+| C         | Conection Status    |
+| c         | Extract Cookie      |
+| D         | Request duration    |
+| f         | Requested file      |
+| H         | Protocol            |
+| h         | Remote host         |
+| i         | Remote address      |
+| L         | Local address       |
+| l         | Auth login name     |
+| m         | Request methode     |
+| p         | Server posrt        |
+| R         | Referer             |
+| r         | Request string      |
+| s         | Return status       |
+| t         | Request timestamp   |
+| U         | Request URI         |
+| u         | Username            |
+| V         | Server name         |
+| v         | VirtualHost name    |
 
 # License
 

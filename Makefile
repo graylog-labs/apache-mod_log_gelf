@@ -8,8 +8,6 @@ APXS=apxs
 APACHECTL=apachectl
 
 #   additional defines, includes and libraries
-#DEFS=-Dmy_define=my_value
-#INCLUDES=-Imy/include/dir
 LIBS=-ljson-c -lz
 
 #   the default target

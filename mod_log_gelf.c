@@ -10,11 +10,18 @@
 
 #include "mod_log_gelf.h"
 
-#define DEFAULT_LOG_FMT "ABDhmsvRti";
+#define DEFAULT_LOG_FMT "ABDhmsvRti"
+#define UDP 0
+#define TCP 1 
 
-struct in_addr haddr;
+module AP_MODULE_DECLARE_DATA log_gelf_module;
+
 int verbose = 0;
+struct in_addr haddr;
 int glport;
+int sock;
+struct sockaddr_in* sock_addr;
+size_t sock_addr_len = sizeof(struct sockaddr_in);
 
 typedef struct {
   char key;               /* item letter character */
@@ -26,6 +33,7 @@ typedef struct {
 typedef struct {
   int         enabled;
   int         port;         /* GELF port */
+  int         protocol;     /* 0=UDP 1=TCP */
   const char *server;       /* Hostname/IP of Graylog server */
   const char *source;       /* Source field */
   const char *facility;     /* Facility field */
@@ -80,9 +88,18 @@ static const char *set_gelf_connection_parameter(cmd_parms *cmd, void *cfg, cons
   apr_uri_t uri;
   apr_uri_parse(cmd->pool, arg, &uri);
 
-  if (strcmp(uri.scheme, "udp") != 0) {
+  if (apr_strnatcmp(uri.scheme, "udp") == 0) {
+    config.protocol = UDP;
+  }
+
+  if (apr_strnatcmp(uri.scheme, "tcp") == 0) {
+    config.protocol = TCP;
+  }
+
+  if (config.protocol != UDP && config.protocol != TCP) {
     log_error(APLOG_MARK, APLOG_ERR, 0, cmd->server,
-                "mod_log_gelf: Server protocol needs to be 'udp://', disable module.");
+                "mod_log_gelf: Server protocol is %s, but must be 'udp://' or 'tcp://', disable module.",
+                 uri.scheme);
     config.enabled = 0;
   }
 
@@ -164,6 +181,9 @@ static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *pte
   apr_pool_create(&config.parse_pool, p);
   config.parsed_fields = apr_pcalloc(config.parse_pool, strlen(config.fields) * sizeof(log_item *));
 
+  /* allocate memory for socket address */
+  sock_addr = apr_palloc(p, sock_addr_len);
+
   /* register available logging fields */
   log_gelf_register_item(s,p,'A', extract_agent,             NULL, "_agent");
   log_gelf_register_item(s,p,'a', extract_request_query,     NULL, "_request_args");
@@ -206,12 +226,17 @@ static int log_gelf_transaction(request_rec *request) {
   //log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
   //            "mod_log_gelf: %s", json);
 
-  transferData* tdata = log_gelf_zlib_compress(json, request);
-  log_gelf_send_message(tdata, request);
-  // free up
-  free(tdata->data);
-  free(tdata);
-  free(json);
+  transferData* tdata;
+  if (config.protocol == TCP) {
+    tdata = apr_palloc(request->pool, sizeof(transferData));
+    memset(tdata, 0, sizeof(transferData));
+    tdata->data = json;
+    tdata->size = strlen(json);
+    log_gelf_send_message_tcp(tdata, request);
+  } else if (config.protocol == UDP) {
+    tdata = log_gelf_zlib_compress(json, request);
+    log_gelf_send_message_udp(tdata, request);
+  }
 }
 
 char * log_gelf_make_json(request_rec *request) {
@@ -250,9 +275,11 @@ char * log_gelf_make_json(request_rec *request) {
       verbose ?
           JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_SPACED :
           JSON_C_TO_STRING_PLAIN);
-  char * ret = strdup(str);
+  char * ret = apr_pstrdup(request->pool, str);
+
   //free up
   json_object_put(object);
+
   return ret;
 }
 
@@ -281,9 +308,9 @@ transferData* log_gelf_zlib_compress(const char *line, request_rec *request) {
   // init stream struc and buffers
   z_stream* strm;
   size_t len = strlen(line);
-  void * buf = malloc(len);
+  void * buf = apr_palloc(request->pool, len);
 
-  strm = malloc(sizeof(z_stream));
+  strm = apr_palloc(request->pool, sizeof(z_stream));
   memset(strm, 0, sizeof(z_stream));
   strm->zalloc = Z_NULL;
   strm->zfree = Z_NULL;
@@ -310,11 +337,8 @@ transferData* log_gelf_zlib_compress(const char *line, request_rec *request) {
   }
   deflateEnd(strm);
 
-  // free up
-  free(strm);
-
   // make transfer data
-  transferData * ret = malloc(sizeof(transferData));
+  transferData * ret = apr_palloc(request->pool, sizeof(transferData));
   memset(ret, 0, sizeof(transferData));
   ret->data = buf;
   ret->size = csize;
@@ -322,31 +346,72 @@ transferData* log_gelf_zlib_compress(const char *line, request_rec *request) {
   return ret;
 }
 
-void log_gelf_send_message(const transferData* payload, request_rec *request) {
+void log_gelf_send_message_udp(const transferData* payload, request_rec *request) {
   struct hostent* hp = gethostbyname(config.server);
   struct in_addr* ip = (struct in_addr *) (hp->h_addr_list[0]);
   haddr = *ip;
 
-  int sock;
   struct sockaddr_in* s;
   size_t slen = sizeof(struct sockaddr_in);
+
   sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (sock < 0) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
       "mod_log_gelf: Error opening GELF socket");
   }
   glport = htons(config.port);
-  s = malloc(slen);
+  s = apr_palloc(request->pool, slen);
   memset(s, 0, slen);
   s->sin_family = AF_INET;
   s->sin_port = glport;
   s->sin_addr = haddr;
+
   if (sendto(sock, payload->data, payload->size, 0, (struct sockaddr*)s, slen) == -1) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
       "mod_log_gelf: Error writing to socket %i bytes", payload->size);
   }
+ 
   close(sock);
-  free(s);
+}
+
+void log_gelf_send_message_tcp(const transferData* payload, request_rec *request) {
+  if (!sock) {
+    log_gelf_get_tcp_socket(request);
+  }
+
+  // copy payload and append '\0'
+  char* gelf_payload = apr_pstrmemdup(request->pool, payload->data, payload->size);
+  if (sendto(sock, gelf_payload, payload->size+1, 0, (struct sockaddr*)sock_addr, sock_addr_len) <= 0) {
+    log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
+      "mod_log_gelf: Error writing to socket %i bytes", payload->size);
+    close(sock);
+    sock = 0;
+    memset(sock_addr, 0, sock_addr_len);
+  }
+}
+
+void log_gelf_get_tcp_socket(request_rec *request) {
+  struct hostent* hp = gethostbyname(config.server);
+  struct in_addr* ip = (struct in_addr *) (hp->h_addr_list[0]);
+  haddr = *ip;
+
+  //size_t slen = sizeof(struct sockaddr_in);
+
+  log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
+    "mod_log_gelf: Connecting to server %s", config.server);
+  sock = socket(AF_INET, SOCK_STREAM, 0);
+  if (sock < 0) {
+    log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
+      "mod_log_gelf: Error opening GELF socket");
+  }
+  glport = htons(config.port);
+  //sock_addr = apr_palloc(request->pool, slen);
+  memset(sock_addr, 0, sock_addr_len);
+  sock_addr->sin_family = AF_INET;
+  sock_addr->sin_port = glport;
+  sock_addr->sin_addr = haddr;
+
+  connect(sock, (struct sockaddr*)sock_addr, sock_addr_len);
 }
 
 double log_gelf_get_timestamp() {
@@ -358,8 +423,19 @@ double log_gelf_get_timestamp() {
   return ret;
 }
 
+static void log_gelf_child_init(apr_pool_t *p, server_rec *s) {
+  apr_pool_cleanup_register(p, NULL, log_gelf_close_link, log_gelf_close_link);
+}
+
+apr_status_t log_gelf_close_link(void *data) {
+  close(sock);
+  sock = 0;
+  return APR_SUCCESS;
+}
+
 static void register_hooks(apr_pool_t *p) {
   ap_hook_post_config(log_gelf_post_config, NULL, NULL, APR_HOOK_REALLY_FIRST);
+  ap_hook_child_init(log_gelf_child_init, NULL, NULL, APR_HOOK_MIDDLE);
   ap_hook_log_transaction(log_gelf_transaction, NULL, NULL, APR_HOOK_MIDDLE);
 }
 

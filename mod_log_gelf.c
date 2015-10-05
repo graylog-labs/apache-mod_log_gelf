@@ -1,4 +1,8 @@
 #include <stdio.h>
+#include <sys/ioctl.h>
+#ifdef __linux__
+#include <linux/sockios.h>
+#endif
 
 #include <netdb.h>
 #include <json-c/json.h>
@@ -17,11 +21,9 @@
 module AP_MODULE_DECLARE_DATA log_gelf_module;
 
 int verbose = 0;
-struct in_addr haddr;
-int glport;
-int sock;
-struct sockaddr_in* sock_addr;
-size_t sock_addr_len = sizeof(struct sockaddr_in);
+char errbuf[256];
+apr_sockaddr_t *sa;
+apr_socket_t *s;
 
 typedef struct {
   char key;               /* item letter character */
@@ -156,10 +158,10 @@ static const command_rec log_gelf_directives[] = {
 };
 
 /* Registered hooks */
-static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *s) {
+static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *server) {
   /* source field defaults to server name */
   if (!config.source) {
-    config.source = apr_pstrdup(p, (char *)s->server_hostname);
+    config.source = apr_pstrdup(p, (char *)server->server_hostname);
   }
 
   /* facility defaults to 'apache-gelf' */
@@ -181,32 +183,29 @@ static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *pte
   apr_pool_create(&config.parse_pool, p);
   config.parsed_fields = apr_pcalloc(config.parse_pool, strlen(config.fields) * sizeof(log_item *));
 
-  /* allocate memory for socket address */
-  sock_addr = apr_palloc(p, sock_addr_len);
-
   /* register available logging fields */
-  log_gelf_register_item(s,p,'A', extract_agent,             NULL, "_agent");
-  log_gelf_register_item(s,p,'a', extract_request_query,     NULL, "_request_args");
-  log_gelf_register_item(s,p,'B', extract_bytes_sent,        NULL, "_bytes_send");
-  log_gelf_register_item(s,p,'C', extract_connection_status, NULL, "_connection_status");
-  log_gelf_register_item(s,p,'c', extract_specific_cookie,   config.cookie, "_cookie");
-  log_gelf_register_item(s,p,'D', extract_request_duration,  NULL, "_request_duration_ms");
-  log_gelf_register_item(s,p,'f', extract_request_file,      NULL, "_request_file");
-  log_gelf_register_item(s,p,'H', extract_request_protocol,  NULL, "_request_protocol");
-  log_gelf_register_item(s,p,'h', extract_remote_host,       NULL, "_remote_host");
-  log_gelf_register_item(s,p,'i', extract_remote_address,    NULL, "_remote_address");
-  log_gelf_register_item(s,p,'L', extract_local_address,     NULL, "_local_address");
-  log_gelf_register_item(s,p,'l', extract_remote_logname,    NULL, "_remote_login_name");
-  log_gelf_register_item(s,p,'m', extract_request_method,    NULL, "_request_method");
-  log_gelf_register_item(s,p,'p', extract_server_port,       NULL, "_server_port");
-  log_gelf_register_item(s,p,'R', extract_referer,           NULL, "_referer");
-  log_gelf_register_item(s,p,'r', extract_request_line,      NULL, "_request_line");
-  log_gelf_register_item(s,p,'s', extract_status,            NULL, "_status");
-  log_gelf_register_item(s,p,'t', extract_request_time,      NULL, "_request_time");
-  log_gelf_register_item(s,p,'U', extract_request_uri,       NULL, "_request_uri");
-  log_gelf_register_item(s,p,'u', extract_remote_user,       NULL, "_remote_user");
-  log_gelf_register_item(s,p,'V', extract_server_name,       NULL, "_server_name");
-  log_gelf_register_item(s,p,'v', extract_virtual_host,      NULL, "_virtual_host");
+  log_gelf_register_item(server,p,'A', extract_agent,             NULL, "_agent");
+  log_gelf_register_item(server,p,'a', extract_request_query,     NULL, "_request_args");
+  log_gelf_register_item(server,p,'B', extract_bytes_sent,        NULL, "_bytes_send");
+  log_gelf_register_item(server,p,'C', extract_connection_status, NULL, "_connection_status");
+  log_gelf_register_item(server,p,'c', extract_specific_cookie,   config.cookie, "_cookie");
+  log_gelf_register_item(server,p,'D', extract_request_duration,  NULL, "_request_duration_ms");
+  log_gelf_register_item(server,p,'f', extract_request_file,      NULL, "_request_file");
+  log_gelf_register_item(server,p,'H', extract_request_protocol,  NULL, "_request_protocol");
+  log_gelf_register_item(server,p,'h', extract_remote_host,       NULL, "_remote_host");
+  log_gelf_register_item(server,p,'i', extract_remote_address,    NULL, "_remote_address");
+  log_gelf_register_item(server,p,'L', extract_local_address,     NULL, "_local_address");
+  log_gelf_register_item(server,p,'l', extract_remote_logname,    NULL, "_remote_login_name");
+  log_gelf_register_item(server,p,'m', extract_request_method,    NULL, "_request_method");
+  log_gelf_register_item(server,p,'p', extract_server_port,       NULL, "_server_port");
+  log_gelf_register_item(server,p,'R', extract_referer,           NULL, "_referer");
+  log_gelf_register_item(server,p,'r', extract_request_line,      NULL, "_request_line");
+  log_gelf_register_item(server,p,'s', extract_status,            NULL, "_status");
+  log_gelf_register_item(server,p,'t', extract_request_time,      NULL, "_request_time");
+  log_gelf_register_item(server,p,'U', extract_request_uri,       NULL, "_request_uri");
+  log_gelf_register_item(server,p,'u', extract_remote_user,       NULL, "_remote_user");
+  log_gelf_register_item(server,p,'V', extract_server_name,       NULL, "_server_name");
+  log_gelf_register_item(server,p,'v', extract_virtual_host,      NULL, "_virtual_host");
   
   return OK;
 }
@@ -347,89 +346,82 @@ transferData* log_gelf_zlib_compress(const char *line, request_rec *request) {
 }
 
 void log_gelf_send_message_udp(const transferData* payload, request_rec *request) {
-  struct hostent* hp = gethostbyname(config.server);
-  struct in_addr* ip = (struct in_addr *) (hp->h_addr_list[0]);
-  haddr = *ip;
+  apr_status_t rv;
 
-  struct sockaddr_in* s;
-  size_t slen = sizeof(struct sockaddr_in);
-
-  sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-  if (sock < 0) {
+  apr_size_t len = payload->size;
+  rv = apr_socket_send(s, payload->data, &len);
+  if (rv != APR_SUCCESS) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
-      "mod_log_gelf: Error opening GELF socket");
+      "mod_log_gelf: Error writing to socket %d bytes. Error %s",
+      payload->size, apr_strerror(rv, errbuf, sizeof(errbuf)));
   }
-  glport = htons(config.port);
-  s = apr_palloc(request->pool, slen);
-  memset(s, 0, slen);
-  s->sin_family = AF_INET;
-  s->sin_port = glport;
-  s->sin_addr = haddr;
-
-  if (sendto(sock, payload->data, payload->size, 0, (struct sockaddr*)s, slen) == -1) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
-      "mod_log_gelf: Error writing to socket %i bytes", payload->size);
-  }
- 
-  close(sock);
 }
 
 void log_gelf_send_message_tcp(const transferData* payload, request_rec *request) {
-  if (!sock) {
-    log_gelf_get_tcp_socket(request);
-  }
+  apr_status_t rv;
 
   // copy payload and append '\0'
-  char* gelf_payload = apr_pstrmemdup(request->pool, payload->data, payload->size);
-  if (sendto(sock, gelf_payload, payload->size+1, 0, (struct sockaddr*)sock_addr, sock_addr_len) <= 0) {
+  const char* gelf_payload = apr_pstrmemdup(request->pool, payload->data, payload->size);
+  apr_size_t len = payload->size + 1;
+
+  rv = apr_socket_send(s, gelf_payload, &len);
+  if (rv != APR_SUCCESS) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
-      "mod_log_gelf: Error writing to socket %i bytes", payload->size);
-    close(sock);
-    sock = 0;
-    memset(sock_addr, 0, sock_addr_len);
+      "mod_log_gelf: Error writing to socket %d bytes. Error %s",
+      payload->size, apr_strerror(rv, errbuf, sizeof(errbuf)));
+    apr_socket_close(s);
+    log_gelf_get_socket(request->pool, request->server);
   }
 }
 
-void log_gelf_get_tcp_socket(request_rec *request) {
-  struct hostent* hp = gethostbyname(config.server);
-  struct in_addr* ip = (struct in_addr *) (hp->h_addr_list[0]);
-  haddr = *ip;
+void log_gelf_get_socket(apr_pool_t *p, server_rec *server) {
+  apr_status_t rv;
+  int proto, type;
 
-  //size_t slen = sizeof(struct sockaddr_in);
-
-  log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
-    "mod_log_gelf: Connecting to server %s", config.server);
-  sock = socket(AF_INET, SOCK_STREAM, 0);
-  if (sock < 0) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
-      "mod_log_gelf: Error opening GELF socket");
+  if (config.protocol == TCP) {
+    proto = APR_PROTO_TCP;
+    type  = SOCK_STREAM;
+  } else if (config.protocol == UDP) {
+    proto = APR_PROTO_UDP;
+    type  = SOCK_DGRAM;
   }
-  glport = htons(config.port);
-  //sock_addr = apr_palloc(request->pool, slen);
-  memset(sock_addr, 0, sock_addr_len);
-  sock_addr->sin_family = AF_INET;
-  sock_addr->sin_port = glport;
-  sock_addr->sin_addr = haddr;
 
-  connect(sock, (struct sockaddr*)sock_addr, sock_addr_len);
+  log_error(APLOG_MARK, APLOG_ERR, 0, server,
+    "mod_log_gelf: Connecting to server %s", config.server);
+
+  rv = apr_sockaddr_info_get(&sa, config.server, APR_INET, config.port, 0, p);
+  if (rv != APR_SUCCESS) {
+    log_error(APLOG_MARK, APLOG_ERR, 0, server,
+      "mod_log_gelf: Error setting GELF recipient %s:%d", config.server, config.port);
+  }
+
+  rv = apr_socket_create(&s, sa->family, type, proto, p);
+  if (rv != APR_SUCCESS) {
+    log_error(APLOG_MARK, APLOG_ERR, 0, server,
+      "mod_log_gelf: Error opening GELF socket: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+  }
+
+  rv = apr_socket_connect(s, sa);
+  if (rv != APR_SUCCESS) {
+    log_error(APLOG_MARK, APLOG_ERR, 0, server,
+      "mod_log_gelf: Error connecting to GELF port: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+  }
 }
 
 double log_gelf_get_timestamp() {
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  double ret = tv.tv_sec;
-  double msec = ((double) (tv.tv_usec / 1000)) / 1000.0;
-  ret += msec;
-  return ret;
+  return ((double) (apr_time_now() / 1000)) / 1000.0;
 }
 
-static void log_gelf_child_init(apr_pool_t *p, server_rec *s) {
+static void log_gelf_child_init(apr_pool_t *p, server_rec *server) {
   apr_pool_cleanup_register(p, NULL, log_gelf_close_link, log_gelf_close_link);
+
+  if (!s) {
+    log_gelf_get_socket(p, server);
+  }
 }
 
 apr_status_t log_gelf_close_link(void *data) {
-  close(sock);
-  sock = 0;
+  apr_socket_close(s);
   return APR_SUCCESS;
 }
 
@@ -444,7 +436,7 @@ module AP_MODULE_DECLARE_DATA log_gelf_module =
     STANDARD20_MODULE_STUFF,
     NULL,                /* Per-directory configuration handler */
     NULL,                /* Merge handler for per-directory configurations */
-    NULL, //log_gelf_make_state,  /* Per-server configuration handler */
+    NULL, //log_gelf_make_state, /* Per-server configuration handler */
     NULL, //log_gelf_merge_state, /* Merge handler for per-server configurations */
     log_gelf_directives, /* Any directives we may have for httpd */
     register_hooks       /* Our hook registering function */

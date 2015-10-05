@@ -406,6 +406,10 @@ void log_gelf_get_socket(apr_pool_t *p, server_rec *server) {
     log_error(APLOG_MARK, APLOG_ERR, 0, server,
       "mod_log_gelf: Error connecting to GELF port: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
   }
+
+  /* set non-blocking to the socket */
+  apr_socket_opt_set(s, APR_SO_NONBLOCK, 1);
+  apr_socket_timeout_set(s, 0);
 }
 
 double log_gelf_get_timestamp() {

@@ -260,14 +260,14 @@ static int log_gelf_transaction(request_rec *request) {
     return OK;
   }
 
-  /* allocate memory for actual log message */
-  transferData* tdata;
-  tdata = apr_palloc(request->pool, sizeof(transferData));
-  memset(tdata, 0, sizeof(transferData));
 
   char* json = log_gelf_make_json(request);
 
+  transferData* tdata;
   if (config.protocol == TCP) {
+    /* allocate memory for actual log message */
+    tdata = apr_palloc(request->pool, sizeof(transferData));
+    memset(tdata, 0, sizeof(transferData));
     tdata->data = json;
     tdata->size = strlen(json);
     log_gelf_send_message_tcp(tdata, request);
@@ -388,7 +388,9 @@ void log_gelf_send_message_udp(const transferData* payload, request_rec *request
   apr_status_t rv;
   apr_size_t len = payload->size;
 
-  rv = apr_socket_send(connection.s, payload->data, &len);
+  if (connection.s)
+    rv = apr_socket_send(connection.s, payload->data, &len);
+
   if (rv != APR_SUCCESS) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
       "mod_log_gelf: Error writing to socket %d bytes. Error %s",
@@ -403,7 +405,9 @@ void log_gelf_send_message_tcp(const transferData* payload, request_rec *request
   const char* gelf_payload = apr_pstrmemdup(request->pool, payload->data, payload->size);
   apr_size_t len = payload->size + 1;
 
-  rv = apr_socket_send(connection.s, gelf_payload, &len);
+  if (connection.s)
+    rv = apr_socket_send(connection.s, gelf_payload, &len);
+
   rv = APR_SUCCESS;
   if (rv != APR_SUCCESS) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
@@ -415,7 +419,7 @@ void log_gelf_send_message_tcp(const transferData* payload, request_rec *request
 
 int log_gelf_get_socket(apr_pool_t *p, server_rec *server) {
   apr_status_t rv;
-  int proto, type, i;
+  int proto, type;
 
   if (config.protocol == TCP) {
     proto = APR_PROTO_TCP;
@@ -458,23 +462,29 @@ int log_gelf_get_socket(apr_pool_t *p, server_rec *server) {
       "mod_log_gelf: Error setting send buffer: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
     return errno;
   }
-  rv = apr_socket_opt_set(connection.s, APR_SO_NONBLOCK, 0);
-  if (rv != APR_SUCCESS) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-      "mod_log_gelf: Error setting socket to blocking: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-    return errno;
-  }
-  rv = apr_socket_opt_set(connection.s, APR_TCP_NODELAY, 1);
-  if (rv != APR_SUCCESS) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-      "mod_log_gelf: Error setting socket TCP nodelay: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-    return errno;
-  }
-  rv = apr_socket_timeout_set(connection.s, 0);
-  if (rv != APR_SUCCESS) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-      "mod_log_gelf: Error setting socket timeout: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-    return errno;
+
+  if (config.protocol == TCP) {
+  /* TCP socket options */
+    rv = apr_socket_opt_set(connection.s, APR_SO_NONBLOCK, 0);
+    if (rv != APR_SUCCESS) {
+      log_error(APLOG_MARK, APLOG_ERR, 0, server,
+        "mod_log_gelf: Error setting socket to blocking: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+      return errno;
+    }
+
+    rv = apr_socket_opt_set(connection.s, APR_TCP_NODELAY, 1);
+    if (rv != APR_SUCCESS) {
+      log_error(APLOG_MARK, APLOG_ERR, 0, server,
+        "mod_log_gelf: Error setting socket TCP nodelay: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+      return errno;
+    }
+
+    rv = apr_socket_timeout_set(connection.s, 0);
+    if (rv != APR_SUCCESS) {
+      log_error(APLOG_MARK, APLOG_ERR, 0, server,
+        "mod_log_gelf: Error setting socket timeout: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+      return errno;
+    }
   }
 
   return APR_SUCCESS;
@@ -545,16 +555,22 @@ static void log_gelf_child_init(apr_pool_t *p, server_rec *server) {
   /* allocate memory for network sockets */
   apr_pool_create(&connection.socket_pool, p);
   
-  /* start new thread to check server availability */
-  rv = apr_thread_create(&connection.reconnect_handler, NULL, log_gelf_check_tcp_port, server, p);
-  if (rv != APR_SUCCESS) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-      "mod_log_gelf: Can not create threat for reconnection handler");
-  }
-  rv = apr_thread_detach(connection.reconnect_handler);
-  if (rv != APR_SUCCESS) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-      "mod_log_gelf: Can not detach from reconnection handler");
+  /* start new thread to check server availability in TCP mode. Always send in UDP mode */
+  if (config.protocol == TCP) {
+    rv = apr_thread_create(&connection.reconnect_handler, NULL, log_gelf_check_tcp_port, server, p);
+    if (rv != APR_SUCCESS) {
+      log_error(APLOG_MARK, APLOG_ERR, 0, server,
+        "mod_log_gelf: Can not create threat for reconnection handler");
+    }
+    rv = apr_thread_detach(connection.reconnect_handler);
+    if (rv != APR_SUCCESS) {
+      log_error(APLOG_MARK, APLOG_ERR, 0, server,
+        "mod_log_gelf: Can not detach from reconnection handler");
+    }
+  } else {
+    connection.reachable = 1;
+    connection.connected = 1;
+    log_gelf_get_socket(connection.socket_pool, server);
   }
 }
 

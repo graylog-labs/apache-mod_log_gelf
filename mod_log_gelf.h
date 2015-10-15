@@ -20,7 +20,8 @@ static void log_gelf_child_init(apr_pool_t *p, server_rec *s);
 static int log_gelf_transaction(request_rec *request);
 void log_gelf_send_message_udp(const transferData* payload, request_rec *request);
 void log_gelf_send_message_tcp(const transferData* payload, request_rec *request);
-void log_gelf_get_socket(apr_pool_t *p, server_rec *server);
+int log_gelf_get_socket(apr_pool_t *p, server_rec *server);
+apr_status_t log_gelf_socket_close(apr_socket_t* socket);
 apr_status_t log_gelf_close_link(void *data);
 
 char* log_gelf_make_json(request_rec *request);

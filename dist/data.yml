@@ -1,0 +1,8 @@
+---
+default:
+  version: "0.1.0"
+  revision: "1"
+  homepage: "https://www.graylog.org/"
+  maintainer: "Graylog, Inc. <hello@graylog.org>"
+  vendor: "graylog"
+  license: "Apache v2.0"

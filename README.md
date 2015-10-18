@@ -1,6 +1,16 @@
 # apache-mod_log_gelf
 Apache2 module for writing access logs to Graylog
 
+# Install system package
+
+Ubuntu:
+
+```
+  $ sudo apt-get install apache2 libjson-c2 zlib1g
+  $ sudo dpkg -i libapache2-mod-gelf_0.1.0-1_amd64.deb
+  $ sudo sudo a2enmod log_gelf
+```
+
 # Build
 
 Install dependent c libraries:
@@ -14,6 +24,7 @@ Install dependent c libraries:
 Compile and install modules:
 
 ```
+  $ cd src
   $ make
   $ sudo make install
 ```

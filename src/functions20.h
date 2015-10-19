@@ -88,11 +88,6 @@ static const char *extract_request_duration(request_rec *r, char *a)
 	return apr_psprintf(r->pool, "%.3lf", apr_time_usec(duration)/1000.0);
 }
 
-static const char *extract_request_timestamp(request_rec *r, char *a)
-{
-	return apr_psprintf(r->pool, "%"APR_TIME_T_FMT, apr_time_sec(apr_time_now()));
-}
-
 static const char *extract_connection_status(request_rec *r, char *a) __attribute__((unused));
 static const char *extract_connection_status(request_rec *r, char *a)
 {

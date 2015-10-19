@@ -20,7 +20,16 @@ class ApacheGelf < FPM::Cookery::Recipe
   platforms [:ubuntu] do
     section 'net'
     depends 'apache2', 'libjson-c2', 'zlib1g'
-    build_depends 'libjson-c-dev', 'zlib1g-dev'
+    build_depends 'apache2-dev', 'libjson-c-dev', 'zlib1g-dev'
+
+    config_files '/etc/apache2/mods-available/log_gelf.load',
+                 '/etc/apache2/mods-available/log_gelf.conf'
+  end
+
+  platforms [:debian] do
+    section 'net'
+    depends 'apache2', 'libjson-c2', 'zlib1g'
+    build_depends 'apache2-threaded-dev', 'libjson-c-dev', 'zlib1g-dev'
 
     config_files '/etc/apache2/mods-available/log_gelf.load',
                  '/etc/apache2/mods-available/log_gelf.conf'
@@ -29,13 +38,15 @@ class ApacheGelf < FPM::Cookery::Recipe
   platforms [:centos] do
     section 'net'
     depends 'httpd', 'json-c', 'zlib'
-    build_depends 'json-c-devel', 'zlib-devel'
+    build_depends 'httpd-devel', 'json-c-devel', 'zlib-devel'
 
     config_files '/etc/httpd/conf.modules.d/02-gelf.conf'
   end
 
   def build
     FileUtils.touch(File.join(builddir, '.deps')) 
+    make :clean
+    make
   end
 
   def install

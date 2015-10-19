@@ -10,6 +10,12 @@ ifneq (,$(wildcard /usr/lib64/httpd/build/special.mk))
   top_builddir=/usr/lib64/httpd
   include /usr/lib64/httpd/build/special.mk
 endif
+ifneq (,$(wildcard /etc/debian_version))
+  DISTRIBUTION := $(shell lsb_release -i | cut -f2)
+  ifeq ($(DISTRIBUTION),Debian)
+  DEFS=-DWITH_APACHE22
+  endif
+endif
 
 #   the used tools
 APXS=apxs

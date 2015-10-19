@@ -11,6 +11,23 @@ Ubuntu:
   $ sudo sudo a2enmod log_gelf
 ```
 
+Older Debian systems need installed backports repository in order to install `libjson-c2`:
+
+```
+  $ echo 'deb http://http.debian.net/debian wheezy-backports main' >> /etc/apt/sources.list
+  $ sudo apt-get update
+  $ sudo apt-get install apache2 libjson-c2 zlib1g
+  $ sudo dpkg -i libapache2-mod-gelf_0.1.0-1_amd64.deb
+  $ sudo sudo a2enmod log_gelf
+```
+
+CentOS:
+
+```
+  $ sudo yum install httpd json-c zlib
+  $ sudo rpm -i libapache2-mod-gelf-0.1.0-1.x86_64.rpm
+```
+    
 # Build
 
 Install dependent c libraries:
@@ -77,6 +94,7 @@ What does the `GelfFields` string mean:
 | l         | Auth login name     |
 | m         | Request methode     |
 | p         | Server posrt        |
+| P         | Child PID           |
 | R         | Referer             |
 | r         | Request string      |
 | s         | Return status       |
@@ -85,6 +103,22 @@ What does the `GelfFields` string mean:
 | u         | Username            |
 | V         | Server name         |
 | v         | VirtualHost name    |
+
+# Packages
+
+Build Docker base images:
+
+```
+  $ docker build -t apache-gelf-ubuntu dist/ubuntu1404/
+  $ docker build -t apache-gelf-debian dist/debian7/
+  $ docker build -t apache-gelf-centos dist/centos7/
+```
+
+Bundle module and configuration files to system package, e.g. for Ubuntu:
+
+```
+  $ docker run --rm=true -v /apache-gelf:/apache-gelf -t -i apache-gelf-ubuntu fpm-cook package /apache-gelf/dist/recipe.rb
+```
 
 # License
 

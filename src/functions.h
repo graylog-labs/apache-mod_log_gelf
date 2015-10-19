@@ -12,7 +12,11 @@ static const char *extract_remote_address(request_rec *r, char *a) __attribute__
 
 static const char *extract_remote_address(request_rec *r, char *a)
 {
+    #ifdef WITH_APACHE22
+    return r->connection->remote_ip;
+    #else
     return r->connection->client_ip;
+    #endif
 }
 
 static const char *extract_local_address(request_rec *r, char *a) __attribute__((unused));

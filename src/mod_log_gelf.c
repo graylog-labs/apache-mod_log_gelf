@@ -281,8 +281,6 @@ static int log_gelf_transaction(request_rec *request) {
 
 char * log_gelf_make_json(request_rec *request) {
   int i, length;
-  char* request_timestamp = NULL;
-  extract_request_timestamp(request, request_timestamp);
 
   /* init json object */
   json_object* object = json_object_new_object();
@@ -293,7 +291,7 @@ char * log_gelf_make_json(request_rec *request) {
   json_add_string(object, "short_message", extract_request_line(request, NULL));
   json_add_string(object, "facility", config.facility);
   json_add_int(object, "level", 6); /*0=Emerg, 1=Alert, 2=Crit, 3=Error, 4=Warn, 5=Notice, 6=Info */
-  json_add_string(object, "timestamp", request_timestamp);
+  json_add_string(object, "timestamp", log_gelf_get_timestamp);
 
   /* add extra fields */
   length = strlen(config.fields);
@@ -389,7 +387,7 @@ transferData* log_gelf_zlib_compress(const char *line, request_rec *request) {
 }
 
 void log_gelf_send_message_udp(const transferData* payload, request_rec *request) {
-  apr_status_t rv = NULL;
+  apr_status_t rv;
   apr_size_t len = payload->size;
 
   if (connection.s)
@@ -496,7 +494,7 @@ int log_gelf_get_socket(apr_pool_t *p, server_rec *server) {
 }
 
 apr_status_t log_gelf_socket_close(apr_socket_t* socket) {
-  apr_status_t rv = NULL;
+  apr_status_t rv;
 
   if (socket) {
     rv = apr_socket_close(socket);
@@ -505,11 +503,10 @@ apr_status_t log_gelf_socket_close(apr_socket_t* socket) {
   return rv;
 }
 
-/*
 double log_gelf_get_timestamp() {
   return ((double) (apr_time_now() / 1000)) / 1000.0;
 }
-*/
+
 
 /* connection health check runs in a separate thread */
 static void* APR_THREAD_FUNC log_gelf_check_tcp_port(apr_thread_t *thd, void *server) {

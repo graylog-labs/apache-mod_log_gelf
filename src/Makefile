@@ -1,7 +1,15 @@
 builddir=.
-top_srcdir=/usr/share/apache2
-top_builddir=/usr/share/apache2
-include /usr/share/apache2/build/special.mk
+
+ifneq (,$(wildcard /usr/share/apache2/build/special.mk))
+  top_srcdir=/usr/share/apache2
+  top_builddir=/usr/share/apache2
+  include /usr/share/apache2/build/special.mk
+endif
+ifneq (,$(wildcard /usr/lib64/httpd/build/special.mk))
+  top_srcdir=/etc/httpd
+  top_builddir=/usr/lib64/httpd
+  include /usr/lib64/httpd/build/special.mk
+endif
 
 #   the used tools
 APXS=apxs

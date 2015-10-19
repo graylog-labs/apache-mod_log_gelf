@@ -62,17 +62,12 @@ static const char *extract_request_time(request_rec *r, char *a)
             /* Invalid or old snapshot, so compute the proper time string
              * and store it in the cache
              */
-            char sign;
             int timz;
 
             ap_explode_recent_localtime(&xt, r->request_time);
             timz = xt.tm_gmtoff;
             if (timz < 0) {
                 timz = -timz;
-                sign = '-';
-            }
-            else {
-                sign = '+';
             }
             cached_time->t = t_seconds;
             apr_snprintf(cached_time->timestr, DEFAULT_REQUEST_TIME_SIZE,

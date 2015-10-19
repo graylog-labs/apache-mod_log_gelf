@@ -26,6 +26,14 @@ class ApacheGelf < FPM::Cookery::Recipe
                  '/etc/apache2/mods-available/log_gelf.conf'
   end
 
+  platforms [:centos] do
+    section 'net'
+    depends 'httpd', 'json-c', 'zlib'
+    build_depends 'json-c-devel', 'zlib-devel'
+
+    config_files '/etc/httpd/conf.modules.d/02-gelf.conf'
+  end
+
   def build
     FileUtils.touch(File.join(builddir, '.deps')) 
   end
@@ -35,6 +43,8 @@ class ApacheGelf < FPM::Cookery::Recipe
     when :ubuntu, :debian
       etc('apache2/mods-available').install osfile('log_gelf.load'), 'log_gelf.load'
       etc('apache2/mods-available').install osfile('log_gelf.conf'), 'log_gelf.conf'
+    when :centos
+      etc('httpd/conf.modules.d').install osfile('02-gelf.conf'), '02-gelf.conf'
     end
 
     make :install, 'DESTDIR' => destdir

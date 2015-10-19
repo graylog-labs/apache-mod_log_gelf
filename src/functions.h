@@ -235,14 +235,3 @@ static const char *extract_specific_cookie(request_rec *r, char *a)
 
 	return "-";
 }
-
-static const char *extract_unique_id(request_rec *r, char *a)
-{
-    const char *tempid;
-
-	tempid = apr_table_get(r->subprocess_env, "UNIQUE_ID");
-	if (!tempid)
-	  return "-";
-	else
-	  return tempid;
-}

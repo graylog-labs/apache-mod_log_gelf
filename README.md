@@ -70,7 +70,7 @@ What does the `GelfFields` string mean:
 | A         | Agent string        |
 | a         | Request arguments   |
 | B         | Bytes send          |
-| C         | Conection Status    |
+| C         | Connection status    |
 | c         | Extract Cookie      |
 | D         | Request duration    |
 | f         | Requested file      |
@@ -80,7 +80,7 @@ What does the `GelfFields` string mean:
 | L         | Local address       |
 | l         | Auth login name     |
 | m         | Request methode     |
-| p         | Server posrt        |
+| p         | Server port        |
 | P         | Child PID           |
 | R         | Referer             |
 | r         | Request string      |

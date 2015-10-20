@@ -2,13 +2,15 @@
 Apache2 module for writing access logs to Graylog
 
 # Install system package
+Download a package for your operating system from [here](https://github.com/Graylog2/apache-mod_log_gelf/releases)
 
 Ubuntu:
 
 ```
-  $ sudo apt-get install apache2 libjson-c2 zlib1g
+  $ sudo apt-get install libjson-c2 zlib1g
   $ sudo dpkg -i libapache2-mod-gelf_0.1.0-1_amd64.deb
   $ sudo sudo a2enmod log_gelf
+  restart apache
 ```
 
 Older Debian systems need installed backports repository in order to install `libjson-c2`:
@@ -16,45 +18,29 @@ Older Debian systems need installed backports repository in order to install `li
 ```
   $ echo 'deb http://http.debian.net/debian wheezy-backports main' >> /etc/apt/sources.list
   $ sudo apt-get update
-  $ sudo apt-get install apache2 libjson-c2 zlib1g
+  $ sudo apt-get install libjson-c2 zlib1g
   $ sudo dpkg -i libapache2-mod-gelf_0.1.0-1_amd64.deb
   $ sudo sudo a2enmod log_gelf
+  restart apache
 ```
 
 CentOS:
 
 ```
-  $ sudo yum install httpd json-c zlib
+  $ sudo yum install json-c zlib
   $ sudo rpm -i libapache2-mod-gelf-0.1.0-1.x86_64.rpm
+  restart apache
 ```
     
-# Build
-
-Install dependent c libraries:
-
-```
-  $ sudo apt-get install apache2-dev
-  $ sudo apt-get install libjson-c-dev
-  $ sudo apt-get install zlib1g-dev
-```
-
-Compile and install modules:
-
-```
-  $ cd src
-  $ make
-  $ sudo make install
-```
-
 # Configuration
 
-Load the module `/etc/apache2/mods-enabled/log_gelf.load`:
+Load the module in `/etc/apache2/mods-enabled/log_gelf.load`:
 
 ```
   LoadModule log_gelf_module /usr/lib/apache2/modules/mod_log_gelf.so
 ```
 
-Configure the module `/etc/apache2/mods-enabled/log_gelf.conf`:
+Configure the module in `/etc/apache2/mods-enabled/log_gelf.conf`:
 
 ```
   GelfEnabled On
@@ -65,6 +51,7 @@ Configure the module `/etc/apache2/mods-enabled/log_gelf.conf`:
   GelfCookie "tracking"
   GelfFields "ABDhmsvRti"
 ```
+On CentOS both files are combined in `/etc/httpd/conf.modules.d/02-gelf.conf`
 
 | Parameter    | Argument               | Description                                   |
 |--------------|------------------------|-----------------------------------------------|
@@ -118,6 +105,24 @@ Bundle module and configuration files to system package, e.g. for Ubuntu:
 
 ```
   $ docker run --rm=true -v /apache-gelf:/apache-gelf -t -i apache-gelf-ubuntu fpm-cook package /apache-gelf/dist/recipe.rb
+```
+
+# Compile
+
+Install dependent c libraries:
+
+```
+  $ sudo apt-get install apache2-dev
+  $ sudo apt-get install libjson-c-dev
+  $ sudo apt-get install zlib1g-dev
+```
+
+Compile and install modules:
+
+```
+  $ cd src
+  $ make
+  $ sudo make install
 ```
 
 # License

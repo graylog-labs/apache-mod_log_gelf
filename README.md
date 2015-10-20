@@ -1,4 +1,4 @@
-# apache-mod_log_gelf
+# apache-mod_log_gelf (BETA, not tested in production environments!)
 Apache2 module for writing access logs to Graylog
 
 # Install system package
@@ -9,7 +9,7 @@ Ubuntu:
 ```
   $ sudo apt-get install libjson-c2 zlib1g
   $ sudo dpkg -i libapache2-mod-gelf_0.1.0-1_amd64.deb
-  $ sudo sudo a2enmod log_gelf
+  $ sudo a2enmod log_gelf
   restart apache
 ```
 
@@ -20,7 +20,7 @@ Older Debian systems need installed backports repository in order to install `li
   $ sudo apt-get update
   $ sudo apt-get install libjson-c2 zlib1g
   $ sudo dpkg -i libapache2-mod-gelf_0.1.0-1_amd64.deb
-  $ sudo sudo a2enmod log_gelf
+  $ sudo a2enmod log_gelf
   restart apache
 ```
 

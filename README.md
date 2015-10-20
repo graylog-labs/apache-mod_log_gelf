@@ -1,4 +1,5 @@
-# apache-mod_log_gelf (BETA, not tested in production environments!)
+# apache-mod_log_gelf
+## (BETA, not tested in production environments!)
 Apache2 module for writing access logs to Graylog
 
 # Install system package

@@ -23,7 +23,7 @@
 module AP_MODULE_DECLARE_DATA log_gelf_module;
 
 int verbose = 0;
-char errbuf[256];
+char errbuf[1024];
 
 typedef struct {
   char key;               /* item letter character */
@@ -241,6 +241,8 @@ static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *pte
 }
 
 static int log_gelf_transaction(request_rec *request) {
+  transferData* tdata;
+
   /* skip logging if module is disabled or no connection parameters are given */
   if (config.enabled == 0) {
     log_error(APLOG_MARK, APLOG_NOTICE, 0, request->server,
@@ -260,12 +262,11 @@ static int log_gelf_transaction(request_rec *request) {
     return OK;
   }
 
-
   char* json = log_gelf_make_json(request);
 
-  transferData* tdata;
   if (config.protocol == TCP) {
     /* allocate memory for actual log message */
+    transferData * tdata = apr_palloc(request->pool, sizeof(transferData));
     tdata = apr_palloc(request->pool, sizeof(transferData));
     memset(tdata, 0, sizeof(transferData));
     tdata->data = json;
@@ -291,7 +292,7 @@ char * log_gelf_make_json(request_rec *request) {
   json_add_string(object, "short_message", extract_request_line(request, NULL));
   json_add_string(object, "facility", config.facility);
   json_add_int(object, "level", 6); /*0=Emerg, 1=Alert, 2=Crit, 3=Error, 4=Warn, 5=Notice, 6=Info */
-  json_add_string(object, "timestamp", log_gelf_get_timestamp);
+  json_add_double(object, "timestamp", log_gelf_get_timestamp());
 
   /* add extra fields */
   length = strlen(config.fields);
@@ -388,10 +389,17 @@ transferData* log_gelf_zlib_compress(const char *line, request_rec *request) {
 
 void log_gelf_send_message_udp(const transferData* payload, request_rec *request) {
   apr_status_t rv;
-  apr_size_t len = payload->size;
+  apr_size_t len;
 
-  if (connection.s)
+  if (payload->size > 0) {
+    len = payload->size;
+  } else {
+    return;
+  }
+
+  if (connection.s) {
     rv = apr_socket_send(connection.s, payload->data, &len);
+  }
 
   if (rv != APR_SUCCESS) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
@@ -402,10 +410,17 @@ void log_gelf_send_message_udp(const transferData* payload, request_rec *request
 
 void log_gelf_send_message_tcp(const transferData* payload, request_rec *request) {
   apr_status_t rv;
+  apr_size_t len;
+
+  if (payload->size > 0) {
+    /* one extra byte for string termination */
+    len = payload->size + 1;
+  } else {
+    return;
+  }
 
   /* copy payload and append '\0' */
   const char* gelf_payload = apr_pstrmemdup(request->pool, payload->data, payload->size);
-  apr_size_t len = payload->size + 1;
 
   if (connection.s)
     rv = apr_socket_send(connection.s, gelf_payload, &len);
@@ -545,16 +560,17 @@ static void* APR_THREAD_FUNC log_gelf_check_tcp_port(apr_thread_t *thd, void *se
 
   log_error(APLOG_MARK, APLOG_NOTICE, 0, server,
     "mod_log_gelf: Shutting down reconnection handler");
+  log_gelf_socket_close(connection.s_t);
   apr_thread_exit(thd, APR_SUCCESS);
 
-  return NULL;
+  return APR_SUCCESS;
 }
 
 static void log_gelf_child_init(apr_pool_t *p, server_rec *server) {
   apr_status_t rv;
 
   /* register cleanup function */
-  apr_pool_cleanup_register(p, p, log_gelf_close_link, log_gelf_close_link);
+  apr_pool_cleanup_register(p, server, log_gelf_debug_pool, log_gelf_close_link);
 
   /* allocate memory for network sockets */
   apr_pool_create(&connection.socket_pool, p);
@@ -578,7 +594,14 @@ static void log_gelf_child_init(apr_pool_t *p, server_rec *server) {
   }
 }
 
-apr_status_t log_gelf_close_link(void *p) {
+apr_status_t log_gelf_debug_pool(void* server) {
+  if (verbose > 0) {
+    log_error(APLOG_MARK, APLOG_ERR, 0, server,
+        "mod_log_gelf: Closing memory pool!");
+  }
+}
+
+apr_status_t log_gelf_close_link(void *data) {
   apr_status_t rv;
 
   /* exit reconnection thread */
@@ -586,7 +609,6 @@ apr_status_t log_gelf_close_link(void *p) {
 
   /* close sockets */
   log_gelf_socket_close(connection.s);
-  log_gelf_socket_close(connection.s_t);
 
   /* wait for thread to finish */
   apr_thread_join(&rv, connection.reconnect_handler);

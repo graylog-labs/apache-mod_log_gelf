@@ -23,7 +23,7 @@ void log_gelf_send_message_tcp(const transferData* payload, request_rec *request
 int log_gelf_get_socket(apr_pool_t *p, server_rec *server);
 apr_status_t log_gelf_socket_close(apr_socket_t* socket);
 apr_status_t log_gelf_close_link(void *data);
-apr_status_t log_gelf_debug_pool(void* server);
+apr_status_t log_gelf_close_pool(void* server);
 
 char* log_gelf_make_json(request_rec *request);
 json_object* json_add_string(json_object *jobj, const char *key, const char *value);

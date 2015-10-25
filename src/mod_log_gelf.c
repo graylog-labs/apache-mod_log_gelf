@@ -74,7 +74,7 @@ void log_gelf_register_item(server_rec *s, apr_pool_t *p,
   int i, length;
 
   if (!log_item_list)
-    log_item_list = apr_array_make(p, 10, sizeof(log_item));
+    log_item_list = apr_array_make(p, 25, sizeof(log_item));
 
   item = apr_array_push(log_item_list);
   item->key = key;
@@ -266,7 +266,6 @@ static int log_gelf_transaction(request_rec *request) {
 
   if (config.protocol == TCP) {
     /* allocate memory for actual log message */
-    transferData * tdata = apr_palloc(request->pool, sizeof(transferData));
     tdata = apr_palloc(request->pool, sizeof(transferData));
     memset(tdata, 0, sizeof(transferData));
     tdata->data = json;
@@ -422,8 +421,9 @@ void log_gelf_send_message_tcp(const transferData* payload, request_rec *request
   /* copy payload and append '\0' */
   const char* gelf_payload = apr_pstrmemdup(request->pool, payload->data, payload->size);
 
-  if (connection.s)
+  if (connection.s) {
     rv = apr_socket_send(connection.s, gelf_payload, &len);
+  }
 
   rv = APR_SUCCESS;
   if (rv != APR_SUCCESS) {
@@ -560,8 +560,7 @@ static void* APR_THREAD_FUNC log_gelf_check_tcp_port(apr_thread_t *thd, void *se
 
   log_error(APLOG_MARK, APLOG_NOTICE, 0, server,
     "mod_log_gelf: Shutting down reconnection handler");
-  log_gelf_socket_close(connection.s_t);
-  apr_thread_exit(thd, APR_SUCCESS);
+  apr_pool_destroy(tp);
 
   return APR_SUCCESS;
 }
@@ -569,8 +568,10 @@ static void* APR_THREAD_FUNC log_gelf_check_tcp_port(apr_thread_t *thd, void *se
 static void log_gelf_child_init(apr_pool_t *p, server_rec *server) {
   apr_status_t rv;
 
-  /* register cleanup function */
-  apr_pool_cleanup_register(p, server, log_gelf_debug_pool, log_gelf_close_link);
+  if (verbose > 0) {
+    log_error(APLOG_MARK, APLOG_ERR, 0, server,
+        "mod_log_gelf: Initializing new child process.");
+  }
 
   /* allocate memory for network sockets */
   apr_pool_create(&connection.socket_pool, p);
@@ -592,26 +593,35 @@ static void log_gelf_child_init(apr_pool_t *p, server_rec *server) {
     connection.connected = 1;
     log_gelf_get_socket(connection.socket_pool, server);
   }
+
+  /* register cleanup function */
+  apr_pool_cleanup_register(p, server, log_gelf_close_pool, log_gelf_close_link);
 }
 
-apr_status_t log_gelf_debug_pool(void* server) {
+apr_status_t log_gelf_close_pool(void* server) {
+  connection.connected = 0;
+  connection.shutdown = 1;
+
   if (verbose > 0) {
     log_error(APLOG_MARK, APLOG_ERR, 0, server,
         "mod_log_gelf: Closing memory pool!");
   }
+
+  return APR_SUCCESS;
 }
 
 apr_status_t log_gelf_close_link(void *data) {
   apr_status_t rv;
 
   /* exit reconnection thread */
+  connection.connected = 0;
   connection.shutdown = 1;
 
   /* close sockets */
   log_gelf_socket_close(connection.s);
 
-  /* wait for thread to finish */
-  apr_thread_join(&rv, connection.reconnect_handler);
+  /* exit reconnection handler */
+  apr_thread_exit(connection.reconnect_handler, APR_SUCCESS);
 
   return APR_SUCCESS;
 }

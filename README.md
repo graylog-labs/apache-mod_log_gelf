@@ -4,10 +4,14 @@ Apache2 module for writing access logs to Graylog
 
 # Install system package
 Download a package for your operating system from [here](https://github.com/Graylog2/apache-mod_log_gelf/releases)
+Update Apache2 to the latests version and use `mpm_prefork`.
 
 Ubuntu:
 
 ```
+  $ sudo apt-get update
+  $ sudo apt-get upgrade
+  $ sudo a2enmod mpm_prefork
   $ sudo apt-get install libjson-c2 zlib1g
   $ sudo dpkg -i libapache2-mod-gelf_0.1.0-1_amd64.deb
   $ sudo a2enmod log_gelf
@@ -19,6 +23,8 @@ Older Debian systems need installed backports repository in order to install `li
 ```
   $ echo 'deb http://http.debian.net/debian wheezy-backports main' >> /etc/apt/sources.list
   $ sudo apt-get update
+  $ sudo apt-get upgrade
+  $ sudo a2enmod mpm_prefork
   $ sudo apt-get install libjson-c2 zlib1g
   $ sudo dpkg -i libapache2-mod-gelf_0.1.0-1_amd64.deb
   $ sudo a2enmod log_gelf

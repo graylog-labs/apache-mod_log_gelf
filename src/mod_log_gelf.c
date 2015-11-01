@@ -17,7 +17,9 @@
 #define DEFAULT_LOG_FMT "ABDhmsvRti"
 #define UDP 0
 #define TCP 1 
-#define RECONNECT_INTERVAL 5000000
+#define RECONNECT_INTERVAL 500000
+#define MIN_CONNECTIONS 1
+#define MAX_CONNECTIONS 5
 #define SEND_BUFFER 1048576
 
 module AP_MODULE_DECLARE_DATA log_gelf_module;
@@ -33,46 +35,44 @@ typedef struct {
 } log_item;
 
 typedef struct {
-  apr_socket_t   *s;                 /* Actual GELF connection */
-  apr_sockaddr_t *sa;                /* GELF Address */
-  apr_socket_t   *s_t;               /* Socket for testing endpoint */
-  apr_sockaddr_t *sa_t;
-  apr_thread_t   *reconnect_handler; /* Parallel thread to check endpoint availablility */
-  int            connected;          /* Whether we are connected to a GELF server or not */
-  int            reachable;          /* GELF server is reachable */
-  int            shutdown;           /* indicates process shutdown */
-  apr_pool_t     *socket_pool;       /* memory pool for option parsing */
+  apr_socket_t   			*s;                 /* Actual GELF connection */
+  apr_sockaddr_t 			*sa;                /* GELF Address */
 } gelf_connection;
 
 typedef struct {
-  int             enabled;
-  int             port;            /* GELF port */
-  int             protocol;        /* 0=UDP 1=TCP */
-  const char      *server;         /* Hostname/IP of Graylog server */
-  const char      *source;         /* Source field */
-  const char      *facility;       /* Facility field */
-  const char      *tag;            /* Optional tag field */
-  const char      *fields;         /* String with fields of interest */
-  const char      *cookie;         /* Log this cookie */
-  log_item        **parsed_fields; /* Link fields to extractor function */
-  gelf_connection *connection;     /* Sockets for sending data and testing endpoints */
-  apr_pool_t      *parse_pool;     /* memory pool for option parsing */
+  int             		enabled;
+  int             		port;            /* GELF port */
+  int             		protocol;        /* 0=UDP 1=TCP */
+  const char      		*server;         /* Hostname/IP of Graylog server */
+  const char      		*source;         /* Source field */
+  const char      		*facility;       /* Facility field */
+  const char      		*tag;            /* Optional tag field */
+  const char      		*fields;         /* String with fields of interest */
+  const char      		*cookie;         /* Log this cookie */
+  log_item        		**parsed_fields; /* Link fields to extractor function */
+  apr_pool_t      		*parse_pool;     /* memory pool for option parsing */
+  apr_reslist_t  			*connection_pool;
+  int            			nmin;
+  int            			nkeep;
+  int            			nmax;
+  apr_interval_time_t ttl;
 } gelf_config;
 
-/* list of "handlers" for log types */
 static apr_array_header_t *log_item_list;
 
+/* module configuration */
 static void *create_gelf_configuration(apr_pool_t *pool, server_rec *server) {
-  gelf_connection *g_connection = apr_pcalloc(pool, sizeof(gelf_connection));
-  apr_atomic_set32(&g_connection->connected, 0);
-  apr_atomic_set32(&g_connection->reachable, 0);
-  apr_atomic_set32(&g_connection->shutdown, 0);
-
   gelf_config *config = apr_pcalloc(pool, sizeof(gelf_config));
-  config->connection = g_connection;
   config->source = "localhost";
   config->facility = "apache-gelf";
   config->fields = DEFAULT_LOG_FMT;
+	/* connection pool settings */
+  config->nmin = MIN_CONNECTIONS;
+  config->nkeep = MIN_CONNECTIONS;
+  config->nmax = MAX_CONNECTIONS;
+  config->ttl = RECONNECT_INTERVAL;
+
+  apr_pool_create(&config->parse_pool, pool);
 
   return config;
 }
@@ -193,12 +193,167 @@ static const command_rec log_gelf_directives[] = {
   { NULL }
 };
 
+/* Connection pool */
+static gelf_connection* log_gelf_connection_acquire(request_rec* r) {
+  gelf_config* config = ap_get_module_config(r->server->module_config, &log_gelf_module) ;
+  apr_status_t rv;
+	gelf_connection *con;
+	
+  rv = apr_reslist_acquire(config->connection_pool, (void**)&con);
+  if ( rv != APR_SUCCESS ) {
+    ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
+      "mod_log_gelf: Failed to acquire GELF connection from pool %s",
+       apr_strerror(rv, errbuf, sizeof(errbuf)));
+       return NULL;
+  }
+	
+  return con;
+}
+
+static apr_status_t log_gelf_connection_release(request_rec* r, gelf_connection *con) {
+	gelf_config* config = ap_get_module_config(r->server->module_config, &log_gelf_module);
+	apr_status_t rv;
+	rv = apr_reslist_release(config->connection_pool, con);
+	if (rv != APR_SUCCESS) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "mod_log_gelf: Can not release GELF socket.");
+	}
+	
+	return rv;
+}
+
+static apr_status_t log_gelf_get_gelf_connection(gelf_connection *gc, gelf_config *config, apr_pool_t *pool) {
+  apr_status_t rv;
+  int proto = NULL;
+	int type = NULL;
+
+  if (config->protocol == TCP) {
+    proto = APR_PROTO_TCP;
+    type  = SOCK_STREAM;
+  } else if (config->protocol == UDP) {
+    proto = APR_PROTO_UDP;
+    type  = SOCK_DGRAM;
+  }
+
+  if (verbose > 0) {
+    ap_log_perror(APLOG_MARK, APLOG_NOTICE, 0, pool,
+      "mod_log_gelf: Connecting to server %s", config->server);
+  }
+
+  rv = apr_sockaddr_info_get(&gc->sa, config->server, APR_INET, config->port, 0, pool);
+  if (rv != APR_SUCCESS) {
+    ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
+      "mod_log_gelf: Error setting GELF recipient %s:%d", config->server, config->port);
+    return rv;
+  }
+
+  rv = apr_socket_create(&gc->s, gc->sa->family, type, proto, pool);
+  if (rv != APR_SUCCESS) {
+    ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
+      "mod_log_gelf: Error opening GELF socket: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+    return rv;
+  }
+
+  rv = apr_socket_connect(gc->s, gc->sa);
+  if (rv != APR_SUCCESS) {
+    ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
+      "mod_log_gelf: Error connecting to GELF port: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+    return rv;
+  }
+
+  /* set socket options */
+  rv = apr_socket_opt_set(gc->s, APR_SO_SNDBUF, SEND_BUFFER);
+  if (rv != APR_SUCCESS) {
+    ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
+      "mod_log_gelf: Error setting send buffer: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+    return rv;
+  }
+
+  if (config->protocol == TCP) {
+    /* TCP socket options */
+    rv = apr_socket_opt_set(gc->s, APR_SO_NONBLOCK, 0);
+    if (rv != APR_SUCCESS) {
+      ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
+        "mod_log_gelf: Error setting socket to blocking: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+      return rv;
+    }
+
+    rv = apr_socket_opt_set(gc->s, APR_TCP_NODELAY, 1);
+    if (rv != APR_SUCCESS) {
+      ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
+        "mod_log_gelf: Error setting socket TCP nodelay: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+      return rv;
+    }
+
+    rv = apr_socket_timeout_set(gc->s, 0);
+    if (rv != APR_SUCCESS) {
+      ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
+        "mod_log_gelf: Error setting socket timeout: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
+      return rv;
+    }
+  }
+
+  return APR_SUCCESS;
+}
+
+static apr_status_t gelf_pool_construct(void** rs, void* params, apr_pool_t* pool) {
+  gelf_config *config = (gelf_config*)params;
+  apr_status_t rv;
+	
+	if (config->enabled < 1) {
+		/* module disabled, no socket needed */
+		return APR_SUCCESS;
+	}
+	
+  if (verbose > 0) {
+    ap_log_perror(APLOG_MARK, APLOG_CRIT, 0, pool, "mod_log_gelf: Creating new socket for pool: %s:%d",
+                  config->server, config->port);
+  }
+
+	gelf_connection *con;
+	con = apr_palloc(pool, sizeof(gelf_connection));
+	rv = log_gelf_get_gelf_connection(con, config, pool);
+  if (rv != APR_SUCCESS) {
+    return APR_EGENERAL;
+  }
+
+  *rs = con;
+
+  if (!*rs ) {
+    ap_log_perror(APLOG_MARK, APLOG_CRIT, 0, pool, "mod_log_gelf: Failed to store socket in resource list");
+    return APR_EGENERAL;
+  }
+  return APR_SUCCESS;
+}
+
+static apr_status_t gelf_pool_destruct(void* resource, void* params, apr_pool_t* pool) {
+	if (resource) {
+		gelf_connection *con = (gelf_connection*)resource;
+  	apr_socket_close(con->s);
+	}
+  return APR_SUCCESS ;
+}
+
 /* Registered hooks */
 static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *server) {
   gelf_config *config = ap_get_module_config(server->module_config, &log_gelf_module);
 
-  /* allocate memory for log_items */
-  apr_pool_create(&config->parse_pool, p);
+	/* initialize resource list to keep track of socket pool */
+  if ( apr_reslist_create(&config->connection_pool,
+                          config->nmin,
+                          config->nkeep,
+                          config->nmax,
+                          config->ttl,
+                          gelf_pool_construct,
+                          gelf_pool_destruct,
+                          config, p) != APR_SUCCESS ) {
+    ap_log_error(APLOG_MARK, APLOG_CRIT, 0, server, "mod_log_gelf: Failed to initialize resource pool, disabling GELF logging.");
+		config->enabled = 0;
+		return OK;
+  }
+  apr_pool_cleanup_register(p, config->connection_pool,
+                            (void*)apr_reslist_destroy, apr_pool_cleanup_null);
+
+  /* allocate memory for log items */
   config->parsed_fields = apr_pcalloc(config->parse_pool, strlen(config->fields) * sizeof(log_item *));
 
   /* register available logging fields */
@@ -239,12 +394,7 @@ static int log_gelf_transaction(request_rec *request) {
       "mod_log_gelf: Module is disbaled, not sending log data!");
     return OK;
   }
-
-  /* skip logging if there is no connection to a GELF endpoint */
-  if (apr_atomic_read32(&config->connection->connected) == 0 && config->protocol == TCP) {
-    return OK;
-  }
-
+	
   /* skip logging if endpoint is not configured properly */
   if (!config->server || !config->port) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
@@ -253,7 +403,6 @@ static int log_gelf_transaction(request_rec *request) {
   }
 
   char* json = log_gelf_make_json(request);
-
   if (config->protocol == TCP) {
     /* allocate memory for actual log message */
     tdata = apr_palloc(request->pool, sizeof(transferData));
@@ -302,10 +451,7 @@ char * log_gelf_make_json(request_rec *request) {
   }
 
   /* get json string */
-  const char * str = json_object_to_json_string_ext(object,
-      verbose ?
-          JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_SPACED :
-          JSON_C_TO_STRING_PLAIN);
+  const char * str = json_object_to_json_string_ext(object, JSON_C_TO_STRING_PLAIN);
 
   /* free temporary json object */
   json_object_put(object);
@@ -384,18 +530,30 @@ void log_gelf_send_message_udp(const transferData* payload, request_rec *request
   if (payload->size > 0) {
     len = payload->size;
   } else {
-    return;
+    log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
+      "mod_log_gelf: Got empty log message, not sending anything.");
+		return;
   }
 
-  if (config->connection->s) {
-    rv = apr_socket_send(config->connection->s, payload->data, &len);
+	/* acquire a free socket, send message, release socket */
+  gelf_connection *con = log_gelf_connection_acquire(request);
+	if (!con) {
+		return;
+	}
+  
+  if (verbose > 0) {
+    log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
+      "mod_log_gelf: Sending GELF message: %s", (char*)payload->data);
   }
 
+  rv = apr_socket_send(con->s, payload->data, &len);
   if (rv != APR_SUCCESS) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
       "mod_log_gelf: Error writing to socket %d bytes. Error %s",
       payload->size, apr_strerror(rv, errbuf, sizeof(errbuf)));
   }
+
+	log_gelf_connection_release(request, con);
 }
 
 void log_gelf_send_message_tcp(const transferData* payload, request_rec *request) {
@@ -407,159 +565,38 @@ void log_gelf_send_message_tcp(const transferData* payload, request_rec *request
     /* one extra byte for string termination */
     len = payload->size + 1;
   } else {
+    log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
+      "mod_log_gelf: Got empty log message, not sending anything.");
     return;
   }
 
   /* copy payload and append '\0' */
   const char* gelf_payload = apr_pstrmemdup(request->pool, payload->data, payload->size);
 
-  if (config->connection->s) {
-    rv = apr_socket_send(config->connection->s, gelf_payload, &len);
+	/* acquire a free socket, send message, release socket */
+  gelf_connection *con = log_gelf_connection_acquire(request);
+	if (!con) {
+		return;
+	}
+  
+  if (verbose > 0) {
+    log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
+      "mod_log_gelf: Sending GELF message: %s", gelf_payload);
   }
 
-  rv = APR_SUCCESS;
+  rv = apr_socket_send(con->s, gelf_payload, &len);
   if (rv != APR_SUCCESS) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
       "mod_log_gelf: Error writing to socket %d bytes. Error %s",
       payload->size, apr_strerror(rv, errbuf, sizeof(errbuf)));
-    apr_atomic_set32(&config->connection->connected, 0);
+			apr_reslist_invalidate(config->connection_pool, con) ;
   }
-}
-
-int log_gelf_get_socket(apr_pool_t *p, server_rec *server) {
-  apr_status_t rv;
-  gelf_config *config = ap_get_module_config(server->module_config, &log_gelf_module);
-  int proto = 0;
-  int type = 0;
-
-  if (config->protocol == TCP) {
-    proto = APR_PROTO_TCP;
-    type  = SOCK_STREAM;
-  } else if (config->protocol == UDP) {
-    proto = APR_PROTO_UDP;
-    type  = SOCK_DGRAM;
-  }
-
-  if (verbose > 0) {
-    log_error(APLOG_MARK, APLOG_NOTICE, 0, server,
-      "mod_log_gelf: Connecting to server %s", config->server);
-  }
-
-  rv = apr_sockaddr_info_get(&config->connection->sa, config->server, APR_INET, config->port, 0, p);
-  if (rv != APR_SUCCESS) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-      "mod_log_gelf: Error setting GELF recipient %s:%d", config->server, config->port);
-    return errno;
-  }
-
-  rv = apr_socket_create(&config->connection->s, config->connection->sa->family, type, proto, p);
-  if (rv != APR_SUCCESS) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-      "mod_log_gelf: Error opening GELF socket: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-    return errno;
-  }
-
-  rv = apr_socket_connect(config->connection->s, config->connection->sa);
-  if (rv != APR_SUCCESS) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-      "mod_log_gelf: Error connecting to GELF port: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-    return errno;
-  }
-
-  /* set socket options */
-  rv = apr_socket_opt_set(config->connection->s, APR_SO_SNDBUF, SEND_BUFFER);
-  if (rv != APR_SUCCESS) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-      "mod_log_gelf: Error setting send buffer: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-    return errno;
-  }
-
-  if (config->protocol == TCP) {
-    /* TCP socket options */
-    rv = apr_socket_opt_set(config->connection->s, APR_SO_NONBLOCK, 0);
-    if (rv != APR_SUCCESS) {
-      log_error(APLOG_MARK, APLOG_ERR, 0, server,
-        "mod_log_gelf: Error setting socket to blocking: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-      return errno;
-    }
-
-    rv = apr_socket_opt_set(config->connection->s, APR_TCP_NODELAY, 1);
-    if (rv != APR_SUCCESS) {
-      log_error(APLOG_MARK, APLOG_ERR, 0, server,
-        "mod_log_gelf: Error setting socket TCP nodelay: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-      return errno;
-    }
-
-    rv = apr_socket_timeout_set(config->connection->s, 0);
-    if (rv != APR_SUCCESS) {
-      log_error(APLOG_MARK, APLOG_ERR, 0, server,
-        "mod_log_gelf: Error setting socket timeout: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-      return errno;
-    }
-  }
-
-  return APR_SUCCESS;
-}
-
-apr_status_t log_gelf_socket_close(apr_socket_t* socket) {
-  apr_status_t rv;
-
-  if (socket) {
-    rv = apr_socket_close(socket);
-    socket = NULL;
-  }
-  return rv;
+	
+	log_gelf_connection_release(request, con);
 }
 
 double log_gelf_get_timestamp() {
   return ((double) (apr_time_now() / 1000)) / 1000.0;
-}
-
-
-/* connection health check runs in a separate thread */
-static void* APR_THREAD_FUNC log_gelf_check_tcp_port(apr_thread_t *thd, void *server_v) {
-  const int proto = APR_PROTO_TCP;
-  const int type = SOCK_STREAM;
-  server_rec *server = server_v;
-  apr_pool_t *tp;
-  apr_pool_create(&tp, NULL);
-  apr_status_t rv;
-  gelf_config *config = ap_get_module_config(server->module_config, &log_gelf_module);
-
-  apr_sockaddr_info_get(&config->connection->sa_t, config->server, APR_INET, config->port, 0, tp);
-
-  while(apr_atomic_read32(&config->connection->shutdown) == 0) {
-    apr_socket_create(&config->connection->s_t, config->connection->sa_t->family, type, proto, tp);
-    rv = apr_socket_connect(config->connection->s_t, config->connection->sa_t);
-    if (rv != APR_SUCCESS) {
-      log_error(APLOG_MARK, APLOG_ERR, 0, server,
-        "mod_log_gelf: GELF connection lost: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
-      apr_atomic_set32(&config->connection->reachable, 0);
-      apr_atomic_set32(&config->connection->connected, 0);
-    } else {
-      apr_atomic_set32(&config->connection->reachable, 1);
-    }
-    log_gelf_socket_close(config->connection->s_t);
-
-    /* reconnect if GELF endpoint is reachable and we are not connected */
-    if (apr_atomic_read32(&config->connection->reachable) &&
-        !apr_atomic_read32(&config->connection->connected)) {
-      rv = log_gelf_get_socket(config->connection->socket_pool, server);
-      if (rv == APR_SUCCESS) {
-        apr_atomic_set32(&config->connection->connected, 1);
-      }
-    }
-
-    /* wait for next check interval */
-    apr_sleep(RECONNECT_INTERVAL);
-  }
-
-  log_error(APLOG_MARK, APLOG_ERR, 0, server,
-    "mod_log_gelf: Shutting down reconnection handler");
-
-  apr_pool_destroy(tp);
-
-  return APR_SUCCESS;
 }
 
 static void log_gelf_child_init(apr_pool_t *p, server_rec *server) {
@@ -577,62 +614,6 @@ static void log_gelf_child_init(apr_pool_t *p, server_rec *server) {
     gelf_config *config = create_gelf_configuration(p, server);
     ap_set_module_config(server->module_config, &log_gelf_module, config);
   }
-
-  /* allocate memory for network sockets */
-  apr_pool_create(&config->connection->socket_pool, p);
-  
-  /* start new thread to check server availability in TCP mode. Always send in UDP mode */
-  if (config->protocol == TCP) {
-    rv = apr_thread_create(&config->connection->reconnect_handler, NULL, log_gelf_check_tcp_port, server, p);
-    if (rv != APR_SUCCESS) {
-      log_error(APLOG_MARK, APLOG_ERR, 0, server,
-        "mod_log_gelf: Can not create threat for reconnection handler");
-    }
-    rv = apr_thread_detach(config->connection->reconnect_handler);
-    if (rv != APR_SUCCESS) {
-      log_error(APLOG_MARK, APLOG_ERR, 0, server,
-        "mod_log_gelf: Can not detach from reconnection handler");
-    }
-  } else {
-    apr_atomic_set32(&config->connection->reachable, 1);
-    apr_atomic_set32(&config->connection->connected, 1);
-    log_gelf_get_socket(config->connection->socket_pool, server);
-  }
-
-  /* register cleanup function */
-  apr_pool_cleanup_register(p, server, log_gelf_close_pool, log_gelf_close_link);
-}
-
-apr_status_t log_gelf_close_pool(void* server_v) {
-  server_rec *server = server_v;
-  gelf_config *config = ap_get_module_config(server->module_config, &log_gelf_module);
-  apr_atomic_set32(&config->connection->connected, 0);
-  apr_atomic_set32(&config->connection->shutdown, 1);
-
-  if (verbose > 0) {
-    log_error(APLOG_MARK, APLOG_ERR, 0, server,
-        "mod_log_gelf: Closing memory pool!");
-  }
-
-  return APR_SUCCESS;
-}
-
-apr_status_t log_gelf_close_link(void *server_v) {
-  apr_status_t rv;
-  server_rec *server = server_v;
-  gelf_config *config = ap_get_module_config(server->module_config, &log_gelf_module);
-
-  /* exit reconnection thread */
-  apr_atomic_set32(&config->connection->connected, 0);
-  apr_atomic_set32(&config->connection->shutdown, 1);
-
-  /* close sockets */
-  log_gelf_socket_close(config->connection->s);
-
-  /* exit reconnection handler */
-  apr_thread_exit(config->connection->reconnect_handler, APR_SUCCESS);
-
-  return APR_SUCCESS;
 }
 
 static void register_hooks(apr_pool_t *p) {

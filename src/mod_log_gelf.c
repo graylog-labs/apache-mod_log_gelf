@@ -24,7 +24,7 @@
 
 module AP_MODULE_DECLARE_DATA log_gelf_module;
 
-static int verbose = 1;
+static int verbose = 0;
 static char errbuf[1024];
 
 typedef struct {

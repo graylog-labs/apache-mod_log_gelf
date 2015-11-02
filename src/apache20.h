@@ -6,6 +6,7 @@
 #include "apr_hash.h"
 #include "apr_optional.h"
 #include "apr_reslist.h"
+#include "apr_signal.h"
 #define APR_WANT_STRFUNC
 #include "apr_want.h"
 #include "apr_tables.h"

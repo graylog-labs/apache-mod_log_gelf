@@ -17,9 +17,10 @@
 #define DEFAULT_LOG_FMT "ABDhmsvRti"
 #define UDP 0
 #define TCP 1 
-#define RECONNECT_INTERVAL 120000000
+//#define RECONNECT_INTERVAL 120000000 // reconnect every 2min
+#define RECONNECT_INTERVAL 0
 #define MIN_CONNECTIONS 1
-#define MAX_CONNECTIONS 5
+#define MAX_CONNECTIONS 3
 #define SEND_BUFFER 1048576
 
 module AP_MODULE_DECLARE_DATA log_gelf_module;
@@ -406,10 +407,11 @@ static int log_gelf_transaction(request_rec *request) {
   }
 
   char* json = log_gelf_make_json(request);
+
   if (config->protocol == TCP) {
     /* allocate memory for actual log message */
     tdata = apr_palloc(request->pool, sizeof(transferData));
-    memset(tdata, 0, sizeof(transferData));
+    memset(tdata, '\0', sizeof(transferData));
     tdata->data = json;
     tdata->size = strlen(json);
     log_gelf_send_message_tcp(tdata, request);
@@ -454,12 +456,14 @@ char * log_gelf_make_json(request_rec *request) {
   }
 
   /* get json string */
-  const char * str = json_object_to_json_string_ext(object, JSON_C_TO_STRING_PLAIN);
+  const char * json_str = json_object_to_json_string_ext(object, JSON_C_TO_STRING_PLAIN);
+  char *result = apr_pcalloc(request->pool, strlen(json_str)+1);
+  apr_cpystrn(result, json_str, strlen(json_str)+1);
 
   /* free temporary json object */
   json_object_put(object);
 
-  return apr_pstrdup(request->pool, str);
+  return result;
 }
 
 json_object * json_add_string(json_object *jobj, const char *key, const char *value) {
@@ -490,7 +494,7 @@ transferData* log_gelf_zlib_compress(const char *line, request_rec *request) {
   void * buf = apr_palloc(request->pool, len);
 
   strm = apr_palloc(request->pool, sizeof(z_stream));
-  memset(strm, 0, sizeof(z_stream));
+  memset(strm, '\0', sizeof(z_stream));
   strm->zalloc = Z_NULL;
   strm->zfree = Z_NULL;
   strm->opaque = Z_NULL;
@@ -518,7 +522,7 @@ transferData* log_gelf_zlib_compress(const char *line, request_rec *request) {
 
   /* create data to transfer */
   transferData * ret = apr_palloc(request->pool, sizeof(transferData));
-  memset(ret, 0, sizeof(transferData));
+  memset(ret, '\0', sizeof(transferData));
   ret->data = buf;
   ret->size = csize;
 
@@ -593,9 +597,9 @@ void log_gelf_send_message_tcp(const transferData* payload, request_rec *request
       "mod_log_gelf: Error writing to socket %d bytes. Error %s",
       payload->size, apr_strerror(rv, errbuf, sizeof(errbuf)));
       apr_reslist_invalidate(config->connection_pool, con) ;
+  } else {
+    log_gelf_connection_release(request, con);
   }
-
-  log_gelf_connection_release(request, con);
 }
 
 double log_gelf_get_timestamp() {

@@ -203,7 +203,7 @@ static gelf_connection* log_gelf_connection_acquire(request_rec* r) {
   rv = apr_reslist_acquire(config->connection_pool, (void**)&con);
   if (rv != APR_SUCCESS || !con) {
     ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r,
-      "mod_log_gelf: Failed to acquire GELF connection from pool %s",
+      "mod_log_gelf: Failed to acquire GELF connection from pool: %s",
        apr_strerror(rv, errbuf, sizeof(errbuf)));
        return NULL;
   }
@@ -237,7 +237,7 @@ static apr_status_t log_gelf_get_gelf_connection(gelf_connection *gc, gelf_confi
 
   if (verbose > 0) {
     ap_log_perror(APLOG_MARK, APLOG_NOTICE, 0, pool,
-      "mod_log_gelf: Connecting to server %s", config->server);
+      "mod_log_gelf: Connecting to server: %s", config->server);
   }
 
   rv = apr_sockaddr_info_get(&gc->sa, config->server, APR_INET, config->port, 0, pool);
@@ -337,6 +337,19 @@ static apr_status_t gelf_pool_destruct(void* resource, void* params, apr_pool_t*
   return APR_SUCCESS ;
 }
 
+static apr_status_t log_gelf_child_exit(void *resource) {
+    apr_reslist_t *connection_pool = resource;
+    apr_pool_t *pool = NULL;
+    apr_pool_create(&pool, NULL);
+
+
+    while (apr_reslist_acquired_count(connection_pool) != 0) {
+      ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
+        "mod_log_gelf: Socket pool not empty: %i", apr_reslist_acquired_count(connection_pool));
+    }
+    apr_reslist_destroy(connection_pool);
+}
+
 /* Registered hooks */
 static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp, server_rec *server) {
   gelf_config *config = ap_get_module_config(server->module_config, &log_gelf_module);
@@ -354,8 +367,10 @@ static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *pte
     config->enabled = 0;
     return OK;
   }
+//  apr_pool_cleanup_register(p, config->connection_pool,
+//                            (void*)apr_reslist_destroy, apr_pool_cleanup_null);
   apr_pool_cleanup_register(p, config->connection_pool,
-                            (void*)apr_reslist_destroy, apr_pool_cleanup_null);
+                            log_gelf_child_exit, log_gelf_child_exit);
 
   /* allocate memory for log items */
   config->parsed_fields = apr_pcalloc(config->parse_pool, strlen(config->fields) * sizeof(log_item *));

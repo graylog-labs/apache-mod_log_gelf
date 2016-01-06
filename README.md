@@ -38,7 +38,7 @@ CentOS:
   $ sudo rpm -i libapache2-mod-gelf-0.1.0-1.x86_64.rpm
   restart apache
 ```
-    
+
 # Configuration
 
 Load the module in `/etc/apache2/mods-enabled/log_gelf.load`:
@@ -60,15 +60,16 @@ Configure the module in `/etc/apache2/mods-enabled/log_gelf.conf`:
 ```
 On CentOS both files are combined in `/etc/httpd/conf.modules.d/02-gelf.conf`
 
-| Parameter    | Argument               | Description                                   |
-|--------------|------------------------|-----------------------------------------------|
-| GelfEnabled  | On/Off                 | Load GELF logging module                      |
-| GelfUrl      | Graylog server URL     | Set IP and port of a UDP GELF input           |
-| GelfSource   | (Optional)             | Overwrite source field                        |
-| GelfFacility | (Optional)             | Overwrite logging facility                    |
-| GelfTag      | (Optional)             | Add a `tag` field to every log message        |
-| GelfCookie   | (Optional) cookie name | Extract cookie from web request               |
-| GelfFields   | (Optional)             | Configures which information should be logged |
+| Parameter    | Argument               | Description                                       |
+|--------------|------------------------|---------------------------------------------------|
+| GelfEnabled  | On/Off                 | Load GELF logging module                          |
+| GelfUrl      | Graylog server URL     | Set IP and port of a UDP GELF input               |
+| GelfSource   | (Optional)             | Overwrite source field                            |
+| GelfFacility | (Optional)             | Overwrite logging facility                        |
+| GelfTag      | (Optional)             | Add a `tag` field to every log message            |
+| GelfCookie   | (Optional) cookie name | Extract cookie from web request, Use 'c' GelField |
+| GelfHeader   | (Optional) header name | Extract header from web request, Use 'X' GelField |
+| GelfFields   | (Optional)             | Configures which information should be logged     |
 
 What does the `GelfFields` string mean:
 
@@ -97,6 +98,7 @@ What does the `GelfFields` string mean:
 | u         | Username            |
 | V         | Server name         |
 | v         | VirtualHost name    |
+| X         | Extract Header      |
 
 # Packages
 

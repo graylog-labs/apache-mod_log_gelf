@@ -61,11 +61,11 @@ static const char *extract_request_line(request_rec *r, char *a)
 	 * (note the truncation before the protocol string for HTTP/0.9 requests)
 	 * (note also that r->the_request contains the unmodified request)
 	 */
-	return (r->parsed_uri.password) 
+	return (r->parsed_uri.password)
 				? apr_pstrcat(r->pool, r->method, " ",
 					apr_uri_unparse(r->pool,
 						&r->parsed_uri, 0),
-					r->assbackwards ? NULL : " ", 
+					r->assbackwards ? NULL : " ",
 					r->protocol, NULL)
 				: r->the_request;
 }
@@ -146,6 +146,19 @@ static const char *extract_child_pid(request_rec *r, char *a)
     }
     /* bogus format */
     return a;
+}
+
+static const char *extract_header(request_rec *r, char *a)
+{
+	const char *tempref;
+
+	tempref = apr_table_get(r->headers_in, a);
+	if (!tempref)
+	{
+		return "-";
+	} else {
+		return tempref;
+	}
 }
 
 static const char *extract_referer(request_rec *r, char *a)

@@ -16,7 +16,7 @@
 
 #define DEFAULT_LOG_FMT "ABDhmsvRti"
 #define UDP 0
-#define TCP 1 
+#define TCP 1
 //#define RECONNECT_INTERVAL 120000000 // reconnect every 2min
 #define RECONNECT_INTERVAL 0
 #define MIN_CONNECTIONS 1
@@ -50,6 +50,7 @@ typedef struct {
   const char          *tag;             /* Optional tag field */
   const char          *fields;          /* String with fields of interest */
   const char          *cookie;          /* Log this cookie */
+  const char          *header;          /* Log this header */
   log_item            **parsed_fields;  /* Link fields to extractor function */
   apr_pool_t          *parse_pool;      /* memory pool for option parsing */
   apr_reslist_t       *connection_pool; /* Connection pool, with min, max and ttl settings */
@@ -98,7 +99,7 @@ void log_gelf_register_item(server_rec *server, apr_pool_t *p,
   item->field_name = field_name;
   if (arg)
     item->arg = arg;
-  
+
   length = strlen(config->fields);
   for (i = 0; i<length; i++) {
     char *pos;
@@ -182,6 +183,12 @@ static const char *set_gelf_cookie(cmd_parms *cmd, void *cfg, const char *arg) {
   config->cookie = arg;
   return NULL;
 }
+/* Override log format string */
+static const char *set_gelf_header(cmd_parms *cmd, void *cfg, const char *arg) {
+  gelf_config *config = ap_get_module_config(cmd->server->module_config, &log_gelf_module);
+  config->header = arg;
+  return NULL;
+}
 
 static const command_rec log_gelf_directives[] = {
   AP_INIT_FLAG("GelfEnabled", set_gelf_enabled, NULL, RSRC_CONF, "Enable or disable GELF logging"),
@@ -191,6 +198,7 @@ static const command_rec log_gelf_directives[] = {
   AP_INIT_TAKE1("GelfTag", set_gelf_tag, NULL, RSRC_CONF, "Set a identification tag"),
   AP_INIT_TAKE1("GelfFields", set_gelf_fields, NULL, RSRC_CONF, "List of fields that should be logged"),
   AP_INIT_TAKE1("GelfCookie", set_gelf_cookie, NULL, RSRC_CONF, "Add this cookie the log message"),
+  AP_INIT_TAKE1("GelfHeader", set_gelf_header, NULL, RSRC_CONF, "Add this header the log message"),
   { NULL }
 };
 
@@ -399,7 +407,8 @@ static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *pte
   log_gelf_register_item(server,p,'u', extract_remote_user,       NULL, "_remote_user");
   log_gelf_register_item(server,p,'V', extract_server_name,       NULL, "_server_name");
   log_gelf_register_item(server,p,'v', extract_virtual_host,      NULL, "_virtual_host");
-  
+  log_gelf_register_item(server,p,'X', extract_header,            config->header, "_header");
+
   return OK;
 }
 
@@ -444,7 +453,7 @@ char * log_gelf_make_json(request_rec *request) {
 
   /* init json object */
   json_object* object = json_object_new_object();
-  
+
   /* attach field pairs to json root */
   json_add_string(object, "version", "1.1");
   json_add_string(object, "host", config->source);
@@ -562,7 +571,7 @@ void log_gelf_send_message_udp(const transferData* payload, request_rec *request
   if (!con) {
     return;
   }
-  
+
   if (verbose > 0) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
       "mod_log_gelf: Sending GELF message: %s", (char*)payload->data);
@@ -600,7 +609,7 @@ void log_gelf_send_message_tcp(const transferData* payload, request_rec *request
   if (!con || !con->s) {
     return;
   }
-  
+
   if (verbose > 0) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
       "mod_log_gelf: Sending GELF message: %s", gelf_payload);
@@ -656,7 +665,7 @@ static void register_hooks(apr_pool_t *p) {
   ap_hook_log_transaction(log_gelf_transaction, NULL, NULL, APR_HOOK_LAST);
 }
 
-module AP_MODULE_DECLARE_DATA log_gelf_module = { 
+module AP_MODULE_DECLARE_DATA log_gelf_module = {
     STANDARD20_MODULE_STUFF,
     NULL,                       /* Per-directory configuration handler */
     NULL,                       /* Merge handler for per-directory configurations */

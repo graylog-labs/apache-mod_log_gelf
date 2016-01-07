@@ -60,16 +60,16 @@ Configure the module in `/etc/apache2/mods-enabled/log_gelf.conf`:
 ```
 On CentOS both files are combined in `/etc/httpd/conf.modules.d/02-gelf.conf`
 
-| Parameter    | Argument               | Description                                       |
-|--------------|------------------------|---------------------------------------------------|
-| GelfEnabled  | On/Off                 | Load GELF logging module                          |
-| GelfUrl      | Graylog server URL     | Set IP and port of a UDP GELF input               |
-| GelfSource   | (Optional)             | Overwrite source field                            |
-| GelfFacility | (Optional)             | Overwrite logging facility                        |
-| GelfTag      | (Optional)             | Add a `tag` field to every log message            |
-| GelfCookie   | (Optional) cookie name | Extract cookie from web request, Use 'c' GelField |
-| GelfHeader   | (Optional) header name | Extract header from web request, Use 'X' GelField |
-| GelfFields   | (Optional)             | Configures which information should be logged     |
+| Parameter    | Argument               | Description                                        |
+|--------------|------------------------|----------------------------------------------------|
+| GelfEnabled  | On/Off                 | Load GELF logging module                           |
+| GelfUrl      | Graylog server URL     | Set IP and port of a UDP GELF input                |
+| GelfSource   | (Optional)             | Overwrite source field                             |
+| GelfFacility | (Optional)             | Overwrite logging facility                         |
+| GelfTag      | (Optional)             | Add a `tag` field to every log message             |
+| GelfCookie   | (Optional) cookie name | Extract cookie from web request, Use 'c' GelfField |
+| GelfHeader   | (Optional) header name | Extract header from web request, Use 'X' GelfField |
+| GelfFields   | (Optional)             | Configures which information should be logged      |
 
 What does the `GelfFields` string mean:
 
@@ -78,7 +78,7 @@ What does the `GelfFields` string mean:
 | A         | Agent string        |
 | a         | Request arguments   |
 | B         | Bytes send          |
-| C         | Connection status    |
+| C         | Connection status   |
 | c         | Extract Cookie      |
 | D         | Request duration    |
 | f         | Requested file      |
@@ -88,7 +88,7 @@ What does the `GelfFields` string mean:
 | L         | Local address       |
 | l         | Auth login name     |
 | m         | Request methode     |
-| p         | Server port        |
+| p         | Server port         |
 | P         | Child PID           |
 | R         | Referer             |
 | r         | Request string      |

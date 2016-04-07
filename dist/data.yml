@@ -1,6 +1,6 @@
 ---
 default:
-  version: "0.1.0"
+  version: "0.3.0"
   revision: "1"
   homepage: "https://www.graylog.org/"
   maintainer: "Graylog, Inc. <hello@graylog.org>"

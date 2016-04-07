@@ -389,7 +389,7 @@ static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *pte
   log_gelf_register_item(server,p,'B', extract_bytes_sent,        NULL, "_bytes_send");
   log_gelf_register_item(server,p,'C', extract_connection_status, NULL, "_connection_status");
   log_gelf_register_item(server,p,'c', extract_specific_cookie,   config->cookie, "_cookie");
-  log_gelf_register_item(server,p,'D', extract_request_duration,  NULL, "_request_duration_ms");
+  log_gelf_register_item(server,p,'D', extract_request_duration,  NULL, "_request_duration_us");
   log_gelf_register_item(server,p,'f', extract_request_file,      NULL, "_request_file");
   log_gelf_register_item(server,p,'H', extract_request_protocol,  NULL, "_request_protocol");
   log_gelf_register_item(server,p,'h', extract_remote_host,       NULL, "_remote_host");

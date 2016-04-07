@@ -81,6 +81,7 @@ What does the `GelfFields` string mean:
 | C         | Connection status   |
 | c         | Extract Cookie      |
 | D         | Request duration    |
+|           | (in microseconds)   |
 | f         | Requested file      |
 | H         | Protocol            |
 | h         | Remote host         |
@@ -121,9 +122,7 @@ Bundle module and configuration files to system package, e.g. for Ubuntu:
 Install dependent c libraries:
 
 ```
-  $ sudo apt-get install apache2-dev
-  $ sudo apt-get install libjson-c-dev
-  $ sudo apt-get install zlib1g-dev
+  $ sudo apt-get install apache2-dev libjson-c-dev zlib1g-dev
 ```
 
 Compile and install modules:

@@ -31,7 +31,7 @@ Older Debian systems need installed backports repository in order to install `li
   restart apache
 ```
 
-CentOS:
+CentOS (>= 7):
 
 ```
   $ sudo yum install json-c zlib

@@ -73,37 +73,32 @@ On CentOS both files are combined in `/etc/httpd/conf.modules.d/02-gelf.conf`
 
 What does the `GelfFields` string mean:
 
-| Character | Logging information |
-|-----------|---------------------|
-| A         | Agent string        |
-| a         | Request arguments   |
-| B         | Bytes send          |
-| C         | Connection status   |
-| c         | Extract Cookie      |
-|           | (name must be in    |
-|           | GelfCookie)         |
-| D         | Request duration    |
-|           | (in microseconds)   |
-| f         | Requested file      |
-| H         | Protocol            |
-| h         | Remote host         |
-| i         | Remote address      |
-| L         | Local address       |
-| l         | Auth login name     |
-| m         | Request methode     |
-| p         | Server port         |
-| P         | Child PID           |
-| R         | Referer             |
-| r         | Request string      |
-| s         | Return status       |
-| t         | Request timestamp   |
-| U         | Request URI         |
-| u         | Username            |
-| V         | Server name         |
-| v         | VirtualHost name    |
-| X         | Extract Header      |
-|           | (name must be in    |
-|           | GelfHeader)         |
+| Character | Logging information                         |
+|-----------|---------------------------------------------|
+| A         | Agent string                                |
+| a         | Request arguments                           |
+| B         | Bytes send                                  |
+| C         | Connection status                           |
+| c         | Extract Cookie (name must be in GelfCookie) |
+| D         | Request duration (in microseconds)          |
+| f         | Requested file                              |
+| H         | Protocol                                    |
+| h         | Remote host                                 |
+| i         | Remote address                              |
+| L         | Local address                               |
+| l         | Auth login name                             |
+| m         | Request methode                             |
+| p         | Server port                                 |
+| P         | Child PID                                   |
+| R         | Referer                                     |
+| r         | Request string                              |
+| s         | Return status                               |
+| t         | Request timestamp                           |
+| U         | Request URI                                 |
+| u         | Username                                    |
+| V         | Server name                                 |
+| v         | VirtualHost name                            |
+| X         | Extract Header (name must be in GelfHeader) |
 
 # Packages
 

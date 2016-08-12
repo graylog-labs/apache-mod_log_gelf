@@ -232,8 +232,8 @@ static apr_status_t log_gelf_connection_release(request_rec* r, gelf_connection 
 
 static apr_status_t log_gelf_get_gelf_connection(gelf_connection *gc, gelf_config *config, apr_pool_t *pool) {
   apr_status_t rv;
-  int proto = NULL;
-  int type = NULL;
+  int proto = 0;
+  int type = 0;
 
   if (config->protocol == TCP) {
     proto = APR_PROTO_TCP;

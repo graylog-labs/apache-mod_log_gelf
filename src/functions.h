@@ -3,14 +3,14 @@
  * value to the calling entity.
  */
 
-static const json_object *extract_remote_host(request_rec *r, char *a)
+json_object *extract_remote_host(request_rec *r, char *a)
 {
 	return json_object_new_string(ap_get_remote_host(r->connection, r->per_dir_config, REMOTE_NAME, NULL));
 }
 
-static const json_object *extract_remote_address(request_rec *r, char *a) __attribute__((unused));
+json_object *extract_remote_address(request_rec *r, char *a) __attribute__((unused));
 
-static const json_object *extract_remote_address(request_rec *r, char *a)
+json_object *extract_remote_address(request_rec *r, char *a)
 {
     #ifdef WITH_APACHE22
     return json_object_new_string(r->connection->remote_ip);
@@ -19,14 +19,14 @@ static const json_object *extract_remote_address(request_rec *r, char *a)
     #endif
 }
 
-static const json_object *extract_local_address(request_rec *r, char *a) __attribute__((unused));
+json_object *extract_local_address(request_rec *r, char *a) __attribute__((unused));
 
-static const json_object *extract_local_address(request_rec *r, char *a)
+json_object *extract_local_address(request_rec *r, char *a)
 {
     return json_object_new_string(r->connection->local_ip);
 }
 
-static const json_object *extract_remote_logname(request_rec *r, char *a)
+json_object *extract_remote_logname(request_rec *r, char *a)
 {
   const char *rlogin = ap_get_remote_logname(r);
   if (rlogin == NULL) {
@@ -38,7 +38,7 @@ static const json_object *extract_remote_logname(request_rec *r, char *a)
 	return json_object_new_string(rlogin);
 }
 
-static const json_object *extract_remote_user(request_rec *r, char *a)
+json_object *extract_remote_user(request_rec *r, char *a)
 {
 	#ifdef WITH_APACHE13
 	char *rvalue = r->connection->user;
@@ -53,7 +53,7 @@ static const json_object *extract_remote_user(request_rec *r, char *a)
 	return json_object_new_string(rvalue);
 }
 
-static const json_object *extract_request_line(request_rec *r, char *a)
+json_object *extract_request_line(request_rec *r, char *a)
 {
 	/* Upddated to mod_log_config logic */
 	/* NOTE: If the original request contained a password, we
@@ -71,34 +71,34 @@ static const json_object *extract_request_line(request_rec *r, char *a)
 				: r->the_request);
 }
 
-static const json_object *extract_request_file(request_rec *r, char *a)
+json_object *extract_request_file(request_rec *r, char *a)
 {
 	return json_object_new_string(r->filename);
 }
 
-static const json_object *extract_request_uri(request_rec *r, char *a)
+json_object *extract_request_uri(request_rec *r, char *a)
 {
 	return json_object_new_string(r->uri);
 }
 
-static const json_object *extract_request_method(request_rec *r, char *a)
+json_object *extract_request_method(request_rec *r, char *a)
 {
 	return json_object_new_string(r->method);
 }
 
-static const json_object *extract_request_protocol(request_rec *r, char *a)
+json_object *extract_request_protocol(request_rec *r, char *a)
 {
 	return json_object_new_string(r->protocol);
 }
 
-static const json_object *extract_request_query(request_rec *r, char *a)
+json_object *extract_request_query(request_rec *r, char *a)
 {
 	return json_object_new_string((r->args) ? apr_pstrcat(r->pool, "?",
 						r->args, NULL)
 					 : "");
 }
 
-static const json_object *extract_status(request_rec *r, char *a)
+json_object *extract_status(request_rec *r, char *a)
 {
 	if (r->status <= 0) {
 		return NULL;
@@ -107,17 +107,17 @@ static const json_object *extract_status(request_rec *r, char *a)
 	}
 }
 
-static const json_object *extract_virtual_host(request_rec *r, char *a)
+json_object *extract_virtual_host(request_rec *r, char *a)
 {
     return json_object_new_string(r->server->server_hostname);
 }
 
-static const json_object *extract_server_name(request_rec *r, char *a)
+json_object *extract_server_name(request_rec *r, char *a)
 {
     return json_object_new_string(ap_get_server_name(r));
 }
 
-static const json_object *extract_server_port(request_rec *r, char *a)
+json_object *extract_server_port(request_rec *r, char *a)
 {
     return json_object_new_string(apr_psprintf(r->pool, "%u",
                         r->server->port ? r->server->port : ap_default_port(r)));
@@ -132,7 +132,7 @@ static const char *log_server_name(request_rec *r, char *a)
     return ap_get_server_name(r);
 }
 
-static const json_object *extract_child_pid(request_rec *r, char *a)
+json_object *extract_child_pid(request_rec *r, char *a)
 {
     if (*a == '\0' || !strcmp(a, "pid")) {
         return json_object_new_string(apr_psprintf(r->pool, "%" APR_PID_T_FMT, getpid()));
@@ -149,7 +149,7 @@ static const json_object *extract_child_pid(request_rec *r, char *a)
     return json_object_new_string(a);
 }
 
-static const json_object *extract_header(request_rec *r, char *a)
+json_object *extract_header(request_rec *r, char *a)
 {
 	const char *tempref;
 
@@ -162,7 +162,7 @@ static const json_object *extract_header(request_rec *r, char *a)
 	}
 }
 
-static const json_object *extract_referer(request_rec *r, char *a)
+json_object *extract_referer(request_rec *r, char *a)
 {
 	const char *tempref;
 
@@ -175,7 +175,7 @@ static const json_object *extract_referer(request_rec *r, char *a)
 	}
 }
 
-static const json_object *extract_agent(request_rec *r, char *a)
+json_object *extract_agent(request_rec *r, char *a)
 {
     const char *tempag;
 
@@ -188,7 +188,7 @@ static const json_object *extract_agent(request_rec *r, char *a)
     }
 }
 
-static const json_object *extract_specific_cookie(request_rec *r, char *a)
+json_object *extract_specific_cookie(request_rec *r, char *a)
 {
   const char *cookiestr;
   char *cookieend;

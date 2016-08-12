@@ -1,4 +1,4 @@
-static const json_object *extract_bytes_sent(request_rec *r, char *a)
+json_object *extract_bytes_sent(request_rec *r, char *a)
 {
 	if (!r->sent_bodyct || !r->bytes_sent) {
 		return NULL;
@@ -7,7 +7,7 @@ static const json_object *extract_bytes_sent(request_rec *r, char *a)
 	}
 }
 
-static const json_object *extract_request_time_custom(request_rec *r, char *a,
+json_object *extract_request_time_custom(request_rec *r, char *a,
                                            apr_time_exp_t *xt)
 {
     apr_size_t retcode;
@@ -27,7 +27,7 @@ typedef struct {
 #define TIME_CACHE_MASK 3
 static cached_request_time request_time_cache[TIME_CACHE_SIZE];
 
-static const json_object *extract_request_time(request_rec *r, char *a)
+json_object *extract_request_time(request_rec *r, char *a)
 {
 	apr_time_exp_t xt;
 
@@ -82,14 +82,14 @@ static const json_object *extract_request_time(request_rec *r, char *a)
 	}
 }
 
-static const json_object *extract_request_duration(request_rec *r, char *a)
+json_object *extract_request_duration(request_rec *r, char *a)
 {
 	apr_time_t duration = apr_time_now() - r->request_time;
 	return json_object_new_int(apr_time_usec(duration));
 }
 
-static const json_object *extract_connection_status(request_rec *r, char *a) __attribute__((unused));
-static const json_object *extract_connection_status(request_rec *r, char *a)
+json_object *extract_connection_status(request_rec *r, char *a) __attribute__((unused));
+json_object *extract_connection_status(request_rec *r, char *a)
 {
     if (r->connection->aborted)
         return json_object_new_string("X");

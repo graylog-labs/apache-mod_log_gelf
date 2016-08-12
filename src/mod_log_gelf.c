@@ -457,7 +457,8 @@ char * log_gelf_make_json(request_rec *request) {
   /* attach field pairs to json root */
   json_add_string(object, "version", "1.1");
   json_add_string(object, "host", config->source);
-  json_add_string(object, "short_message", extract_request_line(request, NULL));
+  // json_add_string(object, "short_message", extract_request_line(request, NULL));
+  json_object_object_add(object, "short_message", extract_request_line(request, NULL));
   json_add_string(object, "facility", config->facility);
   json_add_int(object, "level", 6); /*0=Emerg, 1=Alert, 2=Crit, 3=Error, 4=Warn, 5=Notice, 6=Info */
   json_add_double(object, "timestamp", log_gelf_get_timestamp());
@@ -466,11 +467,13 @@ char * log_gelf_make_json(request_rec *request) {
   length = strlen(config->fields);
   for (i = 0; i<length; i++) {
     log_item *item = config->parsed_fields[i];
+    json_object* fval;
     if (item != NULL) {
-      if (item->arg)
-        json_add_string(object, item->field_name, item->func(request, (char*)item->arg));
-      else
-        json_add_string(object, item->field_name, item->func(request, ""));
+      fval = item->func(request, (char*)item->arg);
+      if (fval != NULL) {
+	json_object_object_add(object, item->field_name, fval);
+      }
+
     }
   }
 

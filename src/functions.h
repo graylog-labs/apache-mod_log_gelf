@@ -3,42 +3,42 @@
  * value to the calling entity.
  */
 
-static const char *extract_remote_host(request_rec *r, char *a)
+static const json_object *extract_remote_host(request_rec *r, char *a)
 {
-	return (char *) ap_get_remote_host(r->connection, r->per_dir_config, REMOTE_NAME, NULL);
+	return json_object_new_string(ap_get_remote_host(r->connection, r->per_dir_config, REMOTE_NAME, NULL));
 }
 
-static const char *extract_remote_address(request_rec *r, char *a) __attribute__((unused));
+static const json_object *extract_remote_address(request_rec *r, char *a) __attribute__((unused));
 
-static const char *extract_remote_address(request_rec *r, char *a)
+static const json_object *extract_remote_address(request_rec *r, char *a)
 {
     #ifdef WITH_APACHE22
-    return r->connection->remote_ip;
+    return json_object_new_string(r->connection->remote_ip);
     #else
-    return r->connection->client_ip;
+    return json_object_new_string(r->connection->client_ip);
     #endif
 }
 
-static const char *extract_local_address(request_rec *r, char *a) __attribute__((unused));
+static const json_object *extract_local_address(request_rec *r, char *a) __attribute__((unused));
 
-static const char *extract_local_address(request_rec *r, char *a)
+static const json_object *extract_local_address(request_rec *r, char *a)
 {
-    return r->connection->local_ip;
+    return json_object_new_string(r->connection->local_ip);
 }
 
-static const char *extract_remote_logname(request_rec *r, char *a)
+static const json_object *extract_remote_logname(request_rec *r, char *a)
 {
   const char *rlogin = ap_get_remote_logname(r);
   if (rlogin == NULL) {
-    rlogin = "-";
+    return NULL;
   } else if (strlen(rlogin) == 0) {
     rlogin = "\"\"";
   }
 
-	return rlogin;
+	return json_object_new_string(rlogin);
 }
 
-static const char *extract_remote_user(request_rec *r, char *a)
+static const json_object *extract_remote_user(request_rec *r, char *a)
 {
 	#ifdef WITH_APACHE13
 	char *rvalue = r->connection->user;
@@ -50,10 +50,10 @@ static const char *extract_remote_user(request_rec *r, char *a)
 	} else if (strlen(rvalue) == 0) {
 		rvalue = "\"\"";
 	}
-	return rvalue;
+	return json_object_new_string(rvalue);
 }
 
-static const char *extract_request_line(request_rec *r, char *a)
+static const json_object *extract_request_line(request_rec *r, char *a)
 {
 	/* Upddated to mod_log_config logic */
 	/* NOTE: If the original request contained a password, we
@@ -61,65 +61,66 @@ static const char *extract_request_line(request_rec *r, char *a)
 	 * (note the truncation before the protocol string for HTTP/0.9 requests)
 	 * (note also that r->the_request contains the unmodified request)
 	 */
-	return (r->parsed_uri.password)
+	return json_object_new_string(
+		    (r->parsed_uri.password)
 				? apr_pstrcat(r->pool, r->method, " ",
 					apr_uri_unparse(r->pool,
 						&r->parsed_uri, 0),
 					r->assbackwards ? NULL : " ",
 					r->protocol, NULL)
-				: r->the_request;
+				: r->the_request);
 }
 
-static const char *extract_request_file(request_rec *r, char *a)
+static const json_object *extract_request_file(request_rec *r, char *a)
 {
-	return r->filename;
+	return json_object_new_string(r->filename);
 }
 
-static const char *extract_request_uri(request_rec *r, char *a)
+static const json_object *extract_request_uri(request_rec *r, char *a)
 {
-	return r->uri;
+	return json_object_new_string(r->uri);
 }
 
-static const char *extract_request_method(request_rec *r, char *a)
+static const json_object *extract_request_method(request_rec *r, char *a)
 {
-	return r->method;
+	return json_object_new_string(r->method);
 }
 
-static const char *extract_request_protocol(request_rec *r, char *a)
+static const json_object *extract_request_protocol(request_rec *r, char *a)
 {
-	return r->protocol;
+	return json_object_new_string(r->protocol);
 }
 
-static const char *extract_request_query(request_rec *r, char *a)
+static const json_object *extract_request_query(request_rec *r, char *a)
 {
-	return (r->args) ? apr_pstrcat(r->pool, "?",
+	return json_object_new_string((r->args) ? apr_pstrcat(r->pool, "?",
 						r->args, NULL)
-					 : "";
+					 : "");
 }
 
-static const char *extract_status(request_rec *r, char *a)
+static const json_object *extract_status(request_rec *r, char *a)
 {
 	if (r->status <= 0) {
-		return "-";
+		return NULL;
 	} else {
-		return apr_psprintf(r->pool, "%d", r->status);
+		return json_object_new_int(r->status);
 	}
 }
 
-static const char *extract_virtual_host(request_rec *r, char *a)
+static const json_object *extract_virtual_host(request_rec *r, char *a)
 {
-    return r->server->server_hostname;
+    return json_object_new_string(r->server->server_hostname);
 }
 
-static const char *extract_server_name(request_rec *r, char *a)
+static const json_object *extract_server_name(request_rec *r, char *a)
 {
-    return ap_get_server_name(r);
+    return json_object_new_string(ap_get_server_name(r));
 }
 
-static const char *extract_server_port(request_rec *r, char *a)
+static const json_object *extract_server_port(request_rec *r, char *a)
 {
-    return apr_psprintf(r->pool, "%u",
-                        r->server->port ? r->server->port : ap_default_port(r));
+    return json_object_new_string(apr_psprintf(r->pool, "%u",
+                        r->server->port ? r->server->port : ap_default_port(r)));
 }
 
 /* This respects the setting of UseCanonicalName so that
@@ -131,10 +132,10 @@ static const char *log_server_name(request_rec *r, char *a)
     return ap_get_server_name(r);
 }
 
-static const char *extract_child_pid(request_rec *r, char *a)
+static const json_object *extract_child_pid(request_rec *r, char *a)
 {
     if (*a == '\0' || !strcmp(a, "pid")) {
-        return apr_psprintf(r->pool, "%" APR_PID_T_FMT, getpid());
+        return json_object_new_string(apr_psprintf(r->pool, "%" APR_PID_T_FMT, getpid()));
     }
     else if (!strcmp(a, "tid")) {
 #if APR_HAS_THREADS
@@ -142,52 +143,52 @@ static const char *extract_child_pid(request_rec *r, char *a)
 #else
         int tid = 0; /* APR will format "0" anyway but an arg is needed */
 #endif
-        return apr_psprintf(r->pool, "%pT", &tid);
+        return json_object_new_string(apr_psprintf(r->pool, "%pT", &tid));
     }
     /* bogus format */
-    return a;
+    return json_object_new_string(a);
 }
 
-static const char *extract_header(request_rec *r, char *a)
+static const json_object *extract_header(request_rec *r, char *a)
 {
 	const char *tempref;
 
 	tempref = apr_table_get(r->headers_in, a);
 	if (!tempref)
 	{
-		return "-";
+		return NULL;
 	} else {
-		return tempref;
+		return json_object_new_string(tempref);
 	}
 }
 
-static const char *extract_referer(request_rec *r, char *a)
+static const json_object *extract_referer(request_rec *r, char *a)
 {
 	const char *tempref;
 
 	tempref = apr_table_get(r->headers_in, "Referer");
 	if (!tempref)
 	{
-		return "-";
+		return NULL;
 	} else {
-		return tempref;
+		return json_object_new_string(tempref);
 	}
 }
 
-static const char *extract_agent(request_rec *r, char *a)
+static const json_object *extract_agent(request_rec *r, char *a)
 {
     const char *tempag;
 
     tempag = apr_table_get(r->headers_in, "User-Agent");
     if (!tempag)
     {
-        return "-";
+        return NULL;
     } else {
-        return tempag;
+        return json_object_new_string(tempag);
     }
 }
 
-static const char *extract_specific_cookie(request_rec *r, char *a)
+static const json_object *extract_specific_cookie(request_rec *r, char *a)
 {
   const char *cookiestr;
   char *cookieend;
@@ -215,7 +216,7 @@ static const char *extract_specific_cookie(request_rec *r, char *a)
 			    cookieend = ap_strchr(cookiebuf, ';');
 			    if (cookieend != NULL)
 			       *cookieend = '\0';
-			  	return cookiebuf;
+			  	return json_object_new_string(cookiebuf);
 			}
 		}
 
@@ -230,7 +231,7 @@ static const char *extract_specific_cookie(request_rec *r, char *a)
 			    cookieend = ap_strchr(cookiebuf, ';');
 			    if (cookieend != NULL)
 			       *cookieend = '\0';
-			  	return cookiebuf;
+			  	return json_object_new_string(cookiebuf);
 			}
 		}
 
@@ -245,10 +246,10 @@ static const char *extract_specific_cookie(request_rec *r, char *a)
 			    cookieend = ap_strchr(cookiebuf, ';');
 			    if (cookieend != NULL)
 			       *cookieend = '\0';
-			  	return cookiebuf;
+			  	return json_object_new_string(cookiebuf);
 			}
 		}
 	}
 
-	return "-";
+	return NULL;
 }

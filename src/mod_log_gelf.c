@@ -386,7 +386,7 @@ static int log_gelf_post_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *pte
   /* register available logging fields */
   log_gelf_register_item(server,p,'A', extract_agent,             NULL, "_agent");
   log_gelf_register_item(server,p,'a', extract_request_query,     NULL, "_request_args");
-  log_gelf_register_item(server,p,'B', extract_bytes_sent,        NULL, "_bytes_send");
+  log_gelf_register_item(server,p,'B', extract_bytes_sent,        NULL, "_bytes_sent");
   log_gelf_register_item(server,p,'C', extract_connection_status, NULL, "_connection_status");
   log_gelf_register_item(server,p,'c', extract_specific_cookie,   config->cookie, "_cookie");
   log_gelf_register_item(server,p,'D', extract_request_duration,  NULL, "_request_duration_us");

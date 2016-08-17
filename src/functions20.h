@@ -1,19 +1,19 @@
-static const char *extract_bytes_sent(request_rec *r, char *a)
+json_object *extract_bytes_sent(request_rec *r, char *a)
 {
 	if (!r->sent_bodyct || !r->bytes_sent) {
-		return "-";
+		return NULL;
 	} else {
-		return apr_psprintf(r->pool, "%" APR_OFF_T_FMT, r->bytes_sent);
+		return json_object_new_int(r->bytes_sent);
 	}
 }
 
-static const char *extract_request_time_custom(request_rec *r, char *a,
+json_object *extract_request_time_custom(request_rec *r, char *a,
                                            apr_time_exp_t *xt)
 {
     apr_size_t retcode;
     char tstr[MAX_STRING_LEN];
     apr_strftime(tstr, &retcode, sizeof(tstr), a, xt);
-    return apr_pstrdup(r->pool, tstr);
+    return json_object_new_string(apr_pstrdup(r->pool, tstr));
 }
 
 #define DEFAULT_REQUEST_TIME_SIZE 32
@@ -27,7 +27,7 @@ typedef struct {
 #define TIME_CACHE_MASK 3
 static cached_request_time request_time_cache[TIME_CACHE_SIZE];
 
-static const char *extract_request_time(request_rec *r, char *a)
+json_object *extract_request_time(request_rec *r, char *a)
 {
 	apr_time_exp_t xt;
 
@@ -78,26 +78,26 @@ static const char *extract_request_time(request_rec *r, char *a)
             memcpy(&(request_time_cache[i]), cached_time,
                    sizeof(*cached_time));
 		}
-		return cached_time->timestr;
+		return json_object_new_string(cached_time->timestr);
 	}
 }
 
-static const char *extract_request_duration(request_rec *r, char *a)
+json_object *extract_request_duration(request_rec *r, char *a)
 {
 	apr_time_t duration = apr_time_now() - r->request_time;
-	return apr_psprintf(r->pool, "%ld", apr_time_usec(duration));
+	return json_object_new_int(apr_time_usec(duration));
 }
 
-static const char *extract_connection_status(request_rec *r, char *a) __attribute__((unused));
-static const char *extract_connection_status(request_rec *r, char *a)
+json_object *extract_connection_status(request_rec *r, char *a) __attribute__((unused));
+json_object *extract_connection_status(request_rec *r, char *a)
 {
     if (r->connection->aborted)
-        return "X";
+        return json_object_new_string("X");
 
     if (r->connection->keepalive == AP_CONN_KEEPALIVE &&
         (!r->server->keep_alive_max ||
          (r->server->keep_alive_max - r->connection->keepalives) > 0)) {
-        return "+";
+        return json_object_new_string("+");
     }
-    return "-";
+    return NULL;
 }

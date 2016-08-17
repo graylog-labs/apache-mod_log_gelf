@@ -30,14 +30,14 @@ static char errbuf[1024];
 
 typedef struct {
   char key;               /* item letter character */
-  item_func  *func;       /* its extraction function */
+  item_func  *extractor_func;       /* its extraction function */
   const char *arg;        /* one string argument for func */
   const char *field_name; /* GELF extra field name */
 } log_item;
 
 typedef struct {
-  apr_socket_t        *s;                 /* Actual GELF connection */
-  apr_sockaddr_t      *sa;                /* GELF Address */
+  apr_socket_t        *gelf_sock;                 /* Actual GELF connection */
+  apr_sockaddr_t      *gelf_addr;                /* GELF Address */
 } gelf_connection;
 
 typedef struct {
@@ -95,7 +95,7 @@ void log_gelf_register_item(server_rec *server, apr_pool_t *p,
 
   item = apr_array_push(log_item_list);
   item->key = key;
-  item->func = func;
+  item->extractor_func = func;
   item->field_name = field_name;
   if (arg)
     item->arg = arg;
@@ -232,8 +232,8 @@ static apr_status_t log_gelf_connection_release(request_rec* r, gelf_connection 
 
 static apr_status_t log_gelf_get_gelf_connection(gelf_connection *gc, gelf_config *config, apr_pool_t *pool) {
   apr_status_t rv;
-  int proto = NULL;
-  int type = NULL;
+  int proto = 0;
+  int type = 0;
 
   if (config->protocol == TCP) {
     proto = APR_PROTO_TCP;
@@ -248,21 +248,21 @@ static apr_status_t log_gelf_get_gelf_connection(gelf_connection *gc, gelf_confi
       "mod_log_gelf: Connecting to server: %s", config->server);
   }
 
-  rv = apr_sockaddr_info_get(&gc->sa, config->server, APR_INET, config->port, 0, pool);
+  rv = apr_sockaddr_info_get(&gc->gelf_addr, config->server, APR_INET, config->port, 0, pool);
   if (rv != APR_SUCCESS) {
     ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
       "mod_log_gelf: Error setting GELF recipient %s:%d", config->server, config->port);
     return rv;
   }
 
-  rv = apr_socket_create(&gc->s, gc->sa->family, type, proto, pool);
+  rv = apr_socket_create(&gc->gelf_sock, gc->gelf_addr->family, type, proto, pool);
   if (rv != APR_SUCCESS) {
     ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
       "mod_log_gelf: Error opening GELF socket: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
     return rv;
   }
 
-  rv = apr_socket_connect(gc->s, gc->sa);
+  rv = apr_socket_connect(gc->gelf_sock, gc->gelf_addr);
   if (rv != APR_SUCCESS) {
     ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
       "mod_log_gelf: Error connecting to GELF port: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
@@ -270,7 +270,7 @@ static apr_status_t log_gelf_get_gelf_connection(gelf_connection *gc, gelf_confi
   }
 
   /* set socket options */
-  rv = apr_socket_opt_set(gc->s, APR_SO_SNDBUF, SEND_BUFFER);
+  rv = apr_socket_opt_set(gc->gelf_sock, APR_SO_SNDBUF, SEND_BUFFER);
   if (rv != APR_SUCCESS) {
     ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
       "mod_log_gelf: Error setting send buffer: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
@@ -279,21 +279,21 @@ static apr_status_t log_gelf_get_gelf_connection(gelf_connection *gc, gelf_confi
 
   if (config->protocol == TCP) {
     /* TCP socket options */
-    rv = apr_socket_opt_set(gc->s, APR_SO_NONBLOCK, 0);
+    rv = apr_socket_opt_set(gc->gelf_sock, APR_SO_NONBLOCK, 0);
     if (rv != APR_SUCCESS) {
       ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
         "mod_log_gelf: Error setting socket to blocking: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
       return rv;
     }
 
-    rv = apr_socket_opt_set(gc->s, APR_TCP_NODELAY, 1);
+    rv = apr_socket_opt_set(gc->gelf_sock, APR_TCP_NODELAY, 1);
     if (rv != APR_SUCCESS) {
       ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
         "mod_log_gelf: Error setting socket TCP nodelay: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
       return rv;
     }
 
-    rv = apr_socket_timeout_set(gc->s, 0);
+    rv = apr_socket_timeout_set(gc->gelf_sock, 0);
     if (rv != APR_SUCCESS) {
       ap_log_perror(APLOG_MARK, APLOG_ERR, 0, pool,
         "mod_log_gelf: Error setting socket timeout: %s", apr_strerror(rv, errbuf, sizeof(errbuf)));
@@ -340,7 +340,7 @@ static apr_status_t gelf_pool_destruct(void* resource, void* params, apr_pool_t*
       ap_log_perror(APLOG_MARK, APLOG_CRIT, 0, pool, "mod_log_gelf: Removing socket from pool");
     }
     gelf_connection *con = (gelf_connection*)resource;
-    apr_socket_close(con->s);
+    apr_socket_close(con->gelf_sock);
   }
   return APR_SUCCESS ;
 }
@@ -457,7 +457,8 @@ char * log_gelf_make_json(request_rec *request) {
   /* attach field pairs to json root */
   json_add_string(object, "version", "1.1");
   json_add_string(object, "host", config->source);
-  json_add_string(object, "short_message", extract_request_line(request, NULL));
+  // json_add_string(object, "short_message", extract_request_line(request, NULL));
+  json_object_object_add(object, "short_message", extract_request_line(request, NULL));
   json_add_string(object, "facility", config->facility);
   json_add_int(object, "level", 6); /*0=Emerg, 1=Alert, 2=Crit, 3=Error, 4=Warn, 5=Notice, 6=Info */
   json_add_double(object, "timestamp", log_gelf_get_timestamp());
@@ -466,11 +467,13 @@ char * log_gelf_make_json(request_rec *request) {
   length = strlen(config->fields);
   for (i = 0; i<length; i++) {
     log_item *item = config->parsed_fields[i];
+    json_object* fval;
     if (item != NULL) {
-      if (item->arg)
-        json_add_string(object, item->field_name, item->func(request, (char*)item->arg));
-      else
-        json_add_string(object, item->field_name, item->func(request, ""));
+      fval = item->extractor_func(request, (char*)item->arg);
+      if (fval != NULL) {
+	json_object_object_add(object, item->field_name, fval);
+      }
+
     }
   }
 
@@ -577,7 +580,7 @@ void log_gelf_send_message_udp(const transferData* payload, request_rec *request
       "mod_log_gelf: Sending GELF message: %s", (char*)payload->data);
   }
 
-  rv = apr_socket_send(con->s, payload->data, &len);
+  rv = apr_socket_send(con->gelf_sock, payload->data, &len);
   if (rv != APR_SUCCESS) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
       "mod_log_gelf: Error writing to socket %d bytes. Error %s",
@@ -606,7 +609,7 @@ void log_gelf_send_message_tcp(const transferData* payload, request_rec *request
 
   /* acquire a free socket, send message, release socket */
   gelf_connection *con = log_gelf_connection_acquire(request);
-  if (!con || !con->s) {
+  if (!con || !con->gelf_sock) {
     return;
   }
 
@@ -615,7 +618,7 @@ void log_gelf_send_message_tcp(const transferData* payload, request_rec *request
       "mod_log_gelf: Sending GELF message: %s", gelf_payload);
   }
 
-  rv = apr_socket_send(con->s, gelf_payload, &len);
+  rv = apr_socket_send(con->gelf_sock, gelf_payload, &len);
   if (rv != APR_SUCCESS) {
     log_error(APLOG_MARK, APLOG_ERR, 0, request->server,
       "mod_log_gelf: Error writing to socket %d bytes. Error %s",

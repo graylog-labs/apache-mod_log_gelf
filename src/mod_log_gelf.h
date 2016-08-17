@@ -1,4 +1,4 @@
-typedef const char *item_func(request_rec *r, char *a);
+typedef json_object* item_func(request_rec *r, char *a);
 typedef struct transferDataS {
     void * data;
     int size;

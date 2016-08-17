@@ -60,46 +60,45 @@ Configure the module in `/etc/apache2/mods-enabled/log_gelf.conf`:
 ```
 On CentOS both files are combined in `/etc/httpd/conf.modules.d/02-gelf.conf`
 
-| Parameter    | Argument               | Description                                        |
-|--------------|------------------------|----------------------------------------------------|
-| GelfEnabled  | On/Off                 | Load GELF logging module                           |
-| GelfUrl      | Graylog server URL     | Set IP and port of a UDP GELF input                |
-| GelfSource   | (Optional)             | Overwrite source field                             |
-| GelfFacility | (Optional)             | Overwrite logging facility                         |
-| GelfTag      | (Optional)             | Add a `tag` field to every log message             |
-| GelfCookie   | (Optional) cookie name | Extract cookie from web request, Use 'c' GelfField |
-| GelfHeader   | (Optional) header name | Extract header from web request, Use 'X' GelfField |
-| GelfFields   | (Optional)             | Configures which information should be logged      |
+| Parameter    | Argument               | Description                                            |
+|--------------|------------------------|--------------------------------------------------------|
+| GelfEnabled  | On/Off                 | Load GELF logging module                               |
+| GelfUrl      | Graylog server URL     | Set IP and port of a UDP GELF input                    |
+| GelfSource   | (Optional)             | Overwrite source field                                 |
+| GelfFacility | (Optional)             | Overwrite logging facility                             |
+| GelfTag      | (Optional)             | Add a `tag` field to every log message                 |
+| GelfCookie   | (Optional) cookie name | Extract one cookie from web request, Use 'c' GelfField |
+| GelfHeader   | (Optional) header name | Extract one header from web request, Use 'X' GelfField |
+| GelfFields   | (Optional)             | Configures which information should be logged          |
 
 What does the `GelfFields` string mean:
 
-| Character | Logging information |
-|-----------|---------------------|
-| A         | Agent string        |
-| a         | Request arguments   |
-| B         | Bytes send          |
-| C         | Connection status   |
-| c         | Extract Cookie      |
-| D         | Request duration    |
-|           | (in microseconds)   |
-| f         | Requested file      |
-| H         | Protocol            |
-| h         | Remote host         |
-| i         | Remote address      |
-| L         | Local address       |
-| l         | Auth login name     |
-| m         | Request methode     |
-| p         | Server port         |
-| P         | Child PID           |
-| R         | Referer             |
-| r         | Request string      |
-| s         | Return status       |
-| t         | Request timestamp   |
-| U         | Request URI         |
-| u         | Username            |
-| V         | Server name         |
-| v         | VirtualHost name    |
-| X         | Extract Header      |
+| Character | Logging information                         |
+|-----------|---------------------------------------------|
+| A         | Agent string                                |
+| a         | Request arguments                           |
+| B         | Bytes send                                  |
+| C         | Connection status                           |
+| c         | Extract Cookie (name must be in GelfCookie) |
+| D         | Request duration (in microseconds)          |
+| f         | Requested file                              |
+| H         | Protocol                                    |
+| h         | Remote host                                 |
+| i         | Remote address                              |
+| L         | Local address                               |
+| l         | Auth login name                             |
+| m         | Request methode                             |
+| p         | Server port                                 |
+| P         | Child PID                                   |
+| R         | Referer                                     |
+| r         | Request string                              |
+| s         | Return status                               |
+| t         | Request timestamp                           |
+| U         | Request URI                                 |
+| u         | Username                                    |
+| V         | Server name                                 |
+| v         | VirtualHost name                            |
+| X         | Extract Header (name must be in GelfHeader) |
 
 # Packages
 

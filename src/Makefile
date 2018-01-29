@@ -5,6 +5,7 @@ APXS=apxs
 APACHECTL=apachectl
 
 top_builddir=$(shell $(APXS) -q exp_libexecdir)
+top_srcdir=$(top_builddir)
 include $(top_builddir)/build/special.mk
 
 ifneq (,$(wildcard /etc/debian_version))

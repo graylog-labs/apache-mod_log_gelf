@@ -1,25 +1,18 @@
 builddir=.
 
-ifneq (,$(wildcard /usr/share/apache2/build/special.mk))
-  top_srcdir=/usr/share/apache2
-  top_builddir=/usr/share/apache2
-  include /usr/share/apache2/build/special.mk
-endif
-ifneq (,$(wildcard /usr/lib64/httpd/build/special.mk))
-  top_srcdir=/etc/httpd
-  top_builddir=/usr/lib64/httpd
-  include /usr/lib64/httpd/build/special.mk
-endif
+#   the used tools
+APXS=apxs
+APACHECTL=apachectl
+
+top_builddir=$(shell $(APXS) -q exp_libexecdir)
+include $(top_builddir)/build/special.mk
+
 ifneq (,$(wildcard /etc/debian_version))
   DISTRIBUTION := $(shell lsb_release -i | cut -f2)
   ifeq ($(DISTRIBUTION),Debian)
   DEFS=-DWITH_APACHE22
   endif
 endif
-
-#   the used tools
-APXS=apxs
-APACHECTL=apachectl
 
 #   additional defines, includes and libraries
 LIBS=-ljson-c -lz

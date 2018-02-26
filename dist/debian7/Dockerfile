@@ -1,8 +1,8 @@
-FROM debian:wheezy
+FROM debian:wheezy-backports
 
 MAINTAINER Graylog Inc. <hello@graylog.com>
 
-RUN echo 'deb http://http.debian.net/debian wheezy-backports main' >> /etc/apt/sources.list
+RUN mkdir -p /var/cache/apt/archives
 RUN apt-get clean
 RUN apt-get update
 RUN apt-get install -y ruby1.9.1 ruby1.9.1-dev build-essential curl lsb-release

@@ -113,7 +113,7 @@ Build Docker base images:
 Bundle module and configuration files to system package, e.g. for Ubuntu:
 
 ```
-  $ docker run --rm=true -v /apache-gelf:/apache-gelf -t -i apache-gelf-ubuntu fpm-cook package /apache-gelf/dist/recipe.rb
+  $ docker run --rm=true -v `pwd`:/apache-gelf -t -i apache-gelf-ubuntu fpm-cook package /apache-gelf/dist/recipe.rb
 ```
 
 # Compile

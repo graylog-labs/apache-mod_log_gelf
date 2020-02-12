@@ -28,8 +28,18 @@ class ApacheGelf < FPM::Cookery::Recipe
 
   platforms [:debian] do
     section 'net'
-    depends 'apache2', 'libjson-c2', 'zlib1g'
-    build_depends 'apache2-threaded-dev', 'libjson-c-dev', 'zlib1g-dev'
+
+    case FPM::Cookery::Facts.osmajorrelease
+    when '7'
+      depends 'apache2', 'libjson-c2', 'zlib1g'
+      build_depends 'apache2-threaded-dev', 'libjson-c-dev', 'zlib1g-dev'
+    when '8'
+      depends 'apache2', 'libjson-c2', 'zlib1g'
+      build_depends 'apache2-threaded-dev', 'libjson-c-dev', 'zlib1g-dev'
+    else
+      depends 'apache2', 'libjson-c3', 'zlib1g'
+      build_depends 'apache2-dev', 'libjson-c-dev', 'zlib1g-dev'
+    end
 
     config_files '/etc/apache2/mods-available/log_gelf.load',
                  '/etc/apache2/mods-available/log_gelf.conf'

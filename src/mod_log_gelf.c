@@ -159,7 +159,14 @@ static const char *set_gelf_tag(cmd_parms *cmd, void *cfg, const char *arg) {
 /* Override source field */
 static const char *set_gelf_source(cmd_parms *cmd, void *cfg, const char *arg) {
   gelf_config *config = ap_get_module_config(cmd->server->module_config, &log_gelf_module);
-  config->source = arg;
+  if (strcmp(arg,"CURRENT_HOSTNAME") == 0) {
+	char local_hostname[1024];
+	local_hostname[1023]='\0';
+	gethostname(local_hostname, 1023);
+	config->source = strdup(local_hostname);
+  } else {
+  	config->source = arg;
+  }
   return NULL;
 }
 

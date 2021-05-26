@@ -67,6 +67,9 @@ Configure the module in `/etc/apache2/mods-enabled/log_gelf.conf`:
   GelfCookie "tracking"
   GelfFields "ABDhmsvRti"
 ```
+
+You can use GelfSource "CURRENT_HOSTNAME" in order to use name of the host where apache is running.
+
 On CentOS both files are combined in `/etc/httpd/conf.modules.d/02-gelf.conf`
 
 | Parameter    | Argument               | Description                                            |

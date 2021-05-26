@@ -5,6 +5,12 @@ ifneq (,$(wildcard /usr/share/apache2/build/special.mk))
   top_builddir=/usr/share/apache2
   include /usr/share/apache2/build/special.mk
 endif
+# apache2.4 on freebsd
+ifneq (,$(wildcard /usr/local/share/apache24/build/special.mk))
+  top_srcdir=/usr/local/share/apache24
+  top_builddir=/usr/local/share/apache24
+  include /usr/local/share/apache24/build/special.mk
+endif
 ifneq (,$(wildcard /usr/lib64/httpd/build/special.mk))
   top_srcdir=/etc/httpd
   top_builddir=/usr/lib64/httpd

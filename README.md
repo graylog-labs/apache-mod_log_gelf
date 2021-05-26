@@ -39,6 +39,15 @@ CentOS (>= 7):
   restart apache
 ```
 
+FreeBSD:
+
+```
+  $ pkg install gmake
+  $ pkg install json-c
+  $ gmake && sudo gmake install
+  restart apache
+```
+
 # Configuration
 
 Load the module in `/etc/apache2/mods-enabled/log_gelf.load`:
